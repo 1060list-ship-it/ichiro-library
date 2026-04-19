@@ -50,13 +50,14 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
         return
 
     supabase.table("streams").update({
-        "summary":      ai_result.get("summary"),
-        "tags":         ai_result.get("tags", []),
-        "corner_names": ai_result.get("corner_names", []),
-        "guests":       ai_result.get("guests", []),
-        "songs":        ai_result.get("songs", []),
-        "talk_topics":  ai_result.get("talk_topics", []),
-        "ai_prompt_ver": "v1",
+        "summary":        ai_result.get("summary"),
+        "tags":           ai_result.get("tags", []),
+        "corner_names":   ai_result.get("corner_names", []),
+        "guests":         ai_result.get("guests", []),
+        "songs":          ai_result.get("songs", []),
+        "talk_topics":    ai_result.get("talk_topics", []),
+        "has_live_singing": ai_result.get("has_live_singing", False),
+        "ai_prompt_ver":  "v1",
     }).eq("video_id", video_id).execute()
 
     chapters = ai_result.get("chapters", [])
@@ -79,12 +80,18 @@ def run(dry_run: bool = False, target_video_id: str = None):
     total = len(rows)
     logger.info(f"再処理対象: {total}件")
 
+    SKIP_IDS: list[str] = []  # 問題のある動画IDをここに追加
+
     for i, row in enumerate(rows):
-        logger.info(f"--- {i + 1}/{total}件目: {row['video_id']} ---")
+        vid = row['video_id']
+        if vid in SKIP_IDS:
+            logger.info(f"--- {i + 1}/{total}件目: {vid} スキップ ---")
+            continue
+        logger.info(f"--- {i + 1}/{total}件目: {vid} ---")
         try:
             reprocess_one(supabase, gemini, row, dry_run)
         except Exception as e:
-            logger.error(f"[{row['video_id']}] エラー: {e}", exc_info=True)
+            logger.error(f"[{vid}] エラー: {e}", exc_info=True)
         if i < total - 1:
             time.sleep(5)
 
