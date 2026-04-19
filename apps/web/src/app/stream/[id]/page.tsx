@@ -15,7 +15,7 @@ export default function StreamPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: s } = await supabase.from('streams').select('*').eq('video_id', id).single()
+      const { data: s } = await supabase.from('streams').select('*').eq('video_id', id).single() as { data: import('@/lib/types').Stream | null }
       if (s) {
         setStream(s)
         const { data: c } = await supabase
