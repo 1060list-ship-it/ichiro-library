@@ -11,6 +11,9 @@ export type Stream = {
   tags: string[] | null
   corner_names: string[] | null
   guests: string[] | null
+  like_count: number | null
+  songs: string[] | null
+  talk_topics: string[] | null
   youtube_url: string | null
   thumbnail_url: string | null
   status: string

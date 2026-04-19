@@ -1,16 +1,23 @@
 import Link from 'next/link'
 import type { Stream } from '@/lib/types'
 
-type Props = { stream: Stream }
+type Props = { stream: Stream; rank?: number }
 
-export default function StreamCard({ stream }: Props) {
+export default function StreamCard({ stream, rank }: Props) {
   const date = new Date(stream.stream_date).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
 
   return (
     <Link href={`/stream/${stream.video_id}`} className="block">
-      <div className="flex gap-4 rounded-lg bg-gray-900 border border-gray-800 p-4 hover:border-gray-600 transition-colors">
+      <div className="flex gap-3 rounded-lg bg-gray-900 border border-gray-800 p-4 hover:border-gray-600 transition-colors">
+        {rank !== undefined && (
+          <div className="flex-shrink-0 w-7 text-center">
+            <span className={`text-sm font-bold ${rank <= 3 ? 'text-yellow-400' : 'text-gray-500'}`}>
+              {rank}
+            </span>
+          </div>
+        )}
         {stream.thumbnail_url && (
           <img
             src={stream.thumbnail_url}
