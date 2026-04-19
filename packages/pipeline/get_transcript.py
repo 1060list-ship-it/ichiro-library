@@ -18,8 +18,7 @@ from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, Tran
 logger = logging.getLogger(__name__)
 
 _IP_BLOCK_KEYWORDS = ("ip has been blocked", "blocking requests from your ip", "requestblocked", "ipblocked")
-_RETRY_WAIT_SEC = 60  # IPブロック検出時の待機秒数
-_RETRY_MAX = 2
+_BACKOFF_SECONDS = [60, 120, 240]  # 指数バックオフ: 1回目60s, 2回目120s, 3回目240s
 
 
 @dataclass
@@ -48,7 +47,6 @@ def _find_cookies_path() -> Optional[str]:
     if env_path and Path(env_path).exists():
         return env_path
 
-    # パイプラインディレクトリから2階層上（ichiro-libraryルート）を探す
     candidates = [
         Path(__file__).parent.parent.parent / "www.youtube.com_cookies.txt",
         Path(__file__).parent / "www.youtube.com_cookies.txt",
@@ -76,7 +74,10 @@ def _is_ip_block_error(e: Exception) -> bool:
 
 
 def _try_youtube_transcript_api(video_id: str) -> Optional[TranscriptResult]:
-    for attempt in range(1, _RETRY_MAX + 1):
+    for attempt, wait_sec in enumerate([0] + _BACKOFF_SECONDS, start=1):
+        if wait_sec > 0:
+            logger.warning(f"[{video_id}] IPブロック検出（試行{attempt - 1}回目）。{wait_sec}秒待機してリトライ...")
+            time.sleep(wait_sec)
         try:
             api = _build_api()
             transcript = api.fetch(video_id, languages=["ja"])
@@ -91,12 +92,12 @@ def _try_youtube_transcript_api(video_id: str) -> Optional[TranscriptResult]:
             logger.warning(f"[{video_id}] youtube-transcript-api: {e}")
             return None
         except Exception as e:
-            if _is_ip_block_error(e) and attempt < _RETRY_MAX:
-                logger.warning(f"[{video_id}] IPブロック検出（試行{attempt}回目）。{_RETRY_WAIT_SEC}秒待機してリトライ...")
-                time.sleep(_RETRY_WAIT_SEC)
+            if _is_ip_block_error(e) and attempt <= len(_BACKOFF_SECONDS):
                 continue
             logger.warning(f"[{video_id}] youtube-transcript-api 予期しないエラー: {e}")
             return None
+
+    logger.error(f"[{video_id}] 指数バックオフ上限に達しました（最大待機: {_BACKOFF_SECONDS[-1]}秒）")
     return None
 
 
