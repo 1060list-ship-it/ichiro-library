@@ -40,6 +40,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "stream_date":   video_meta["stream_date"],
         "duration_min":  video_meta.get("duration_min"),
         "view_count":    video_meta.get("view_count"),
+        "like_count":    video_meta.get("like_count"),
         "comment_count": video_meta.get("comment_count"),
         "youtube_url":   video_meta.get("youtube_url"),
         "thumbnail_url": video_meta.get("thumbnail_url"),
@@ -55,6 +56,8 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         row["tags"]         = ai_result.get("tags", [])
         row["corner_names"] = ai_result.get("corner_names", [])
         row["guests"]       = ai_result.get("guests", [])
+        row["songs"]        = ai_result.get("songs", [])
+        row["talk_topics"]  = ai_result.get("talk_topics", [])
 
     resp = client.table("streams").upsert(row, on_conflict="video_id").execute()
     stream_id = resp.data[0]["id"]

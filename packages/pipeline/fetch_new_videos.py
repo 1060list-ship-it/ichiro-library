@@ -102,6 +102,7 @@ def _fetch_video_details(youtube, video_ids: list[str]) -> list[dict]:
             "stream_date": stream_date,
             "duration_min": duration_min,
             "view_count": int(stats.get("viewCount", 0)) or None,
+            "like_count": int(stats.get("likeCount", 0)) or None,
             "comment_count": int(stats.get("commentCount", 0)) or None,
             "youtube_url": f"https://www.youtube.com/watch?v={item['id']}",
             "thumbnail_url": snippet.get("thumbnails", {}).get("maxres", {}).get("url")
