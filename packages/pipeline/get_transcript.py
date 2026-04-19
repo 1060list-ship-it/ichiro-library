@@ -6,14 +6,20 @@
 """
 
 import os
+import time
 import logging
 import http.cookiejar
 import requests
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 
 logger = logging.getLogger(__name__)
+
+_IP_BLOCK_KEYWORDS = ("ip has been blocked", "blocking requests from your ip", "requestblocked", "ipblocked")
+_RETRY_WAIT_SEC = 60  # IPブロック検出時の待機秒数
+_RETRY_MAX = 2
 
 
 @dataclass
@@ -36,8 +42,26 @@ def get_transcript(video_id: str) -> TranscriptResult:
     return TranscriptResult(text="", snippets=[], source="failed")
 
 
+def _find_cookies_path() -> Optional[str]:
+    """YOUTUBE_COOKIES_PATH 環境変数 or プロジェクトルートのcookiesファイルを自動検出"""
+    env_path = os.getenv("YOUTUBE_COOKIES_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    # パイプラインディレクトリから2階層上（ichiro-libraryルート）を探す
+    candidates = [
+        Path(__file__).parent.parent.parent / "www.youtube.com_cookies.txt",
+        Path(__file__).parent / "www.youtube.com_cookies.txt",
+    ]
+    for p in candidates:
+        if p.exists():
+            logger.info(f"cookiesファイルを自動検出: {p}")
+            return str(p)
+    return None
+
+
 def _build_api() -> YouTubeTranscriptApi:
-    cookies_path = os.getenv("YOUTUBE_COOKIES_PATH")
+    cookies_path = _find_cookies_path()
     if cookies_path:
         session = requests.Session()
         jar = http.cookiejar.MozillaCookieJar(cookies_path)
@@ -47,23 +71,33 @@ def _build_api() -> YouTubeTranscriptApi:
     return YouTubeTranscriptApi()
 
 
+def _is_ip_block_error(e: Exception) -> bool:
+    return any(kw in str(e).lower() for kw in _IP_BLOCK_KEYWORDS)
+
+
 def _try_youtube_transcript_api(video_id: str) -> Optional[TranscriptResult]:
-    try:
-        api = _build_api()
-        transcript = api.fetch(video_id, languages=["ja"])
-        snippets = [
-            {"text": s.text, "start": s.start, "duration": s.duration}
-            for s in transcript.snippets
-        ]
-        full_text = " ".join(s["text"] for s in snippets)
-        logger.info(f"[{video_id}] youtube-transcript-api 成功 ({len(snippets)} snippets)")
-        return TranscriptResult(text=full_text, snippets=snippets, source="youtube_api")
-    except (NoTranscriptFound, TranscriptsDisabled) as e:
-        logger.warning(f"[{video_id}] youtube-transcript-api: {e}")
-        return None
-    except Exception as e:
-        logger.warning(f"[{video_id}] youtube-transcript-api 予期しないエラー: {e}")
-        return None
+    for attempt in range(1, _RETRY_MAX + 1):
+        try:
+            api = _build_api()
+            transcript = api.fetch(video_id, languages=["ja"])
+            snippets = [
+                {"text": s.text, "start": s.start, "duration": s.duration}
+                for s in transcript.snippets
+            ]
+            full_text = " ".join(s["text"] for s in snippets)
+            logger.info(f"[{video_id}] youtube-transcript-api 成功 ({len(snippets)} snippets)")
+            return TranscriptResult(text=full_text, snippets=snippets, source="youtube_api")
+        except (NoTranscriptFound, TranscriptsDisabled) as e:
+            logger.warning(f"[{video_id}] youtube-transcript-api: {e}")
+            return None
+        except Exception as e:
+            if _is_ip_block_error(e) and attempt < _RETRY_MAX:
+                logger.warning(f"[{video_id}] IPブロック検出（試行{attempt}回目）。{_RETRY_WAIT_SEC}秒待機してリトライ...")
+                time.sleep(_RETRY_WAIT_SEC)
+                continue
+            logger.warning(f"[{video_id}] youtube-transcript-api 予期しないエラー: {e}")
+            return None
+    return None
 
 
 def _try_supadata(video_id: str) -> Optional[TranscriptResult]:

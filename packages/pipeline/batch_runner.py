@@ -92,7 +92,7 @@ def run_batch(dry_run: bool = False):
         except Exception as e:
             logger.error(f"[{video_meta['video_id']}] 処理中にエラー: {e}", exc_info=True)
         if i < len(new_videos) - 1:
-            time.sleep(5)  # YouTubeのIP制限を避けるため動画間に5秒待機
+            time.sleep(15)  # YouTubeのIP制限を避けるため動画間に15秒待機
 
     # 7日前の動画の view_count_7d を更新
     _update_week_old_views(youtube, supabase, dry_run)
