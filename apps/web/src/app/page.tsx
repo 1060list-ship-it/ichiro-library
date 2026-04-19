@@ -8,7 +8,7 @@ import SearchBar from '@/components/SearchBar'
 
 const CATEGORIES = [
   { key: 'ranking-view',   label: '再生数' },
-  { key: 'ranking-god',    label: '神動画' },
+  { key: 'ranking-god',    label: '支持率' },
   { key: 'ライブビデオ解説', label: 'ライブビデオ解説' },
   { key: '深夜対談',        label: '深夜対談' },
   { key: '未知との遭遇',    label: '未知との遭遇' },
@@ -58,6 +58,17 @@ export default function Home() {
       data = (res.data ?? []).sort((a, b) =>
         (b.like_count! / (b.view_count || 1)) - (a.like_count! / (a.view_count || 1))
       )
+    } else if (view === 'ゲーム実況') {
+      const res = await supabase.from('streams').select('*')
+        .ilike('title', '%ゲーム中%')
+        .order('stream_date', { ascending: false }).limit(20)
+      data = res.data ?? []
+    } else if (view === '未知との遭遇') {
+      const res = await supabase.from('streams').select('*')
+        .contains('corner_names', ['未知との遭遇'])
+        .not('title', 'ilike', '%ゲーム中%')
+        .order('stream_date', { ascending: false }).limit(20)
+      data = res.data ?? []
     } else {
       const res = await supabase.from('streams').select('*')
         .contains('corner_names', [view])

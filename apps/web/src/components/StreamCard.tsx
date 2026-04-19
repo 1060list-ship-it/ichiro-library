@@ -31,7 +31,17 @@ export default function StreamCard({ stream, rank }: Props) {
           {stream.summary && (
             <p className="text-sm text-gray-400 line-clamp-2">{stream.summary}</p>
           )}
-          <div className="flex flex-wrap gap-1 pt-1">
+          <div className="flex items-center gap-3 pt-0.5">
+            {stream.view_count != null && stream.like_count != null && (
+              <span className="text-xs font-medium text-yellow-400">
+                支持率 {((stream.like_count / stream.view_count) * 100).toFixed(1)}%
+              </span>
+            )}
+            {stream.view_count != null && (
+              <span className="text-xs text-gray-500">再生 {stream.view_count.toLocaleString()}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
             {stream.tags?.slice(0, 4).map(tag => (
               <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">
                 {tag}
