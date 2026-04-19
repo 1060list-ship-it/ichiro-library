@@ -1,0 +1,8 @@
+.env.local
+*.txt.cookies
+www.youtube.com_cookies.txt
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.next/

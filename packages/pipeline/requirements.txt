@@ -1,0 +1,7 @@
+youtube-transcript-api>=0.6.3
+google-genai>=1.0.0
+google-api-python-client>=2.120.0
+supabase>=2.4.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+isodate>=0.6.1
