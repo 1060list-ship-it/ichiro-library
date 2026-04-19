@@ -54,8 +54,9 @@ export default function Home() {
     } else if (view === 'ranking-god') {
       const res = await supabase.from('streams').select('*')
         .not('like_count', 'is', null).not('view_count', 'is', null)
-        .order('like_count', { ascending: false }).limit(20) as { data: import('@/lib/types').Stream[] | null }
-      data = (res.data ?? []).sort((a, b) =>
+        .order('like_count', { ascending: false }).limit(20)
+      const godData = (res.data ?? []) as Stream[]
+      data = godData.sort((a, b) =>
         (b.like_count! / (b.view_count || 1)) - (a.like_count! / (a.view_count || 1))
       )
     } else if (view === 'ゲーム実況') {
