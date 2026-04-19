@@ -56,8 +56,9 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         row["tags"]         = ai_result.get("tags", [])
         row["corner_names"] = ai_result.get("corner_names", [])
         row["guests"]       = ai_result.get("guests", [])
-        row["songs"]        = ai_result.get("songs", [])
-        row["talk_topics"]  = ai_result.get("talk_topics", [])
+        row["songs"]           = ai_result.get("songs", [])
+        row["has_live_singing"] = ai_result.get("has_live_singing", False)
+        row["talk_topics"]     = ai_result.get("talk_topics", [])
 
     resp = client.table("streams").upsert(row, on_conflict="video_id").execute()
     stream_id = resp.data[0]["id"]

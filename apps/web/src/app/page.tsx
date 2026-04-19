@@ -13,6 +13,7 @@ const CATEGORIES = [
   { key: '深夜対談',        label: '深夜対談' },
   { key: '未知との遭遇',    label: '未知との遭遇' },
   { key: 'ゲーム実況',      label: 'ゲーム実況' },
+  { key: '歌唱あり',        label: '歌唱あり' },
 ]
 
 type View = 'top' | string
@@ -59,6 +60,11 @@ export default function Home() {
       data = godData.sort((a, b) =>
         (b.like_count! / (b.view_count || 1)) - (a.like_count! / (a.view_count || 1))
       )
+    } else if (view === '歌唱あり') {
+      const res = await supabase.from('streams').select('*')
+        .eq('has_live_singing', true)
+        .order('stream_date', { ascending: false }).limit(20)
+      data = res.data ?? []
     } else if (view === 'ゲーム実況') {
       const res = await supabase.from('streams').select('*')
         .ilike('title', '%ゲーム中%')

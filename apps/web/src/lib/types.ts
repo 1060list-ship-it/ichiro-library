@@ -13,6 +13,7 @@ export type Stream = {
   guests: string[] | null
   like_count: number | null
   songs: string[] | null
+  has_live_singing: boolean | null
   talk_topics: string[] | null
   youtube_url: string | null
   thumbnail_url: string | null
