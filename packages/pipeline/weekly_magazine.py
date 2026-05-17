@@ -25,18 +25,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("weekly_magazine")
 
 MODEL_NAME = "gemini-2.5-flash"
-IMAGE_MODEL = "gemini-2.5-flash-image"
+IMAGE_MODEL = "imagen-4.0-fast-generate-001"
 STORAGE_BUCKET = "magazine-covers"
 
 COVER_PROMPT_TEMPLATE = """You are an art director for a Japanese weekly music magazine called "いっくん追いかけマガジン".
 Generate an image generation prompt (in English, max 80 words) for this week's cover illustration.
 
 FIXED STYLE (always include these):
-- editorial magazine cover illustration
+- editorial magazine cover illustration, wide landscape format
 - minimal Japanese aesthetic, muted cool tones with one accent color
 - soft analog film grain, indie zine vibes
-- abstract composition, NO text, NO legible characters, NO logos, NO realistic faces
-- if a human figure appears, silhouette only
+- NO text, NO legible characters, NO logos
+- if depicting Yamaguchi Ichiro or any human figure, use silhouette only — no realistic faces
+- non-human subjects (fish, water, cityscape, guitar, microphone, abstract shapes) can be rendered realistically or illustratively
 
 THIS WEEK'S CONTENT:
 - Headline: {headline}
@@ -150,21 +151,16 @@ def generate_cover_image(client, content: dict, label: str, sb) -> Optional[str]
         image_prompt = prompt_response.strip()
         logger.info(f"[{label}] 画像プロンプト: {image_prompt[:80]}...")
 
-        logger.info(f"[{label}] カバー画像生成中 (Gemini image generation)...")
-        image_response = client.models.generate_content(
+        logger.info(f"[{label}] カバー画像生成中 (Imagen 4)...")
+        image_response = client.models.generate_images(
             model=IMAGE_MODEL,
-            contents=image_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"]
+            prompt=image_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
             )
         )
-        image_bytes = None
-        for part in image_response.candidates[0].content.parts:
-            if hasattr(part, "inline_data") and part.inline_data:
-                image_bytes = part.inline_data.data
-                break
-        if not image_bytes:
-            raise ValueError("画像データが返されませんでした")
+        image_bytes = image_response.generated_images[0].image.image_bytes
 
         file_path = f"{label}.png"
         sb.storage.from_(STORAGE_BUCKET).upload(
