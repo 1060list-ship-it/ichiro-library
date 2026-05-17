@@ -101,7 +101,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <header className="border-b border-gray-800 px-4 py-4 text-center">
+      <header className="border-b border-gray-800 px-4 py-4 text-center relative">
         <h1
           className="text-xl font-bold tracking-wide cursor-pointer hover:text-gray-300 inline-block"
           onClick={() => { setView('top'); setQuery('') }}
@@ -109,6 +109,10 @@ export default function Home() {
           ichiro library
         </h1>
         <p className="text-xs text-gray-400 mt-0.5">山口一郎 YouTubeライブ アーカイブ</p>
+        <a href="/magazine"
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+          マガジン →
+        </a>
       </header>
 
       {/* カテゴリナビゲーション */}

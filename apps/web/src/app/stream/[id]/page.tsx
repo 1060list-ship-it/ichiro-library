@@ -18,13 +18,14 @@ const REASON_COLORS: Record<string, string> = {
 function HighlightList({ highlights, videoId }: { highlights: Highlight[]; videoId: string }) {
   return (
     <div className="bg-gray-900 rounded-lg overflow-hidden">
-      <p className="text-xs text-gray-500 font-medium px-4 pt-4 pb-2">切り抜きポイント</p>
+      <p className="text-xs text-gray-500 font-medium px-4 pt-4 pb-2">盛り上がり</p>
       <div className="divide-y divide-gray-800">
         {highlights.map((h, i) => {
           const mm = Math.floor(h.start_sec / 60)
           const ss = h.start_sec % 60
           const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
-          const url = `https://www.youtube.com/watch?v=${videoId}&t=${h.start_sec}`
+          const linkSec = Math.max(0, h.start_sec - 30)
+          const url = `https://www.youtube.com/watch?v=${videoId}&t=${linkSec}`
           return (
             <a key={i} href={url} target="_blank" rel="noopener noreferrer"
               className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
@@ -120,7 +121,7 @@ export default function StreamPage() {
           </div>
         )}
 
-        {/* ハイライト */}
+        {/* 盛り上がり */}
         {stream.highlights && stream.highlights.length > 0 && (
           <HighlightList highlights={stream.highlights} videoId={stream.video_id} />
         )}
