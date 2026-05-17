@@ -18,12 +18,15 @@ type Topic = {
   streams: { video_id: string; title: string; start_sec: number | null }[]
 }
 
+// 旧形式: string / 新形式: { title, video_id }
+type Song = string | { title: string; video_id?: string }
+
 type MagazineContent = {
   headline: string
   intro: string
   topics: Topic[]
   guests: string[]
-  songs: string[]
+  songs: Song[]
   highlights: Highlight[]
   editor_note: string
 }
@@ -35,7 +38,10 @@ type Magazine = {
   week_end: string
   content: MagazineContent
   cover_image_url: string | null
+  stream_ids: string[] | null
 }
+
+type StreamInfo = { title: string; stream_date: string }
 
 const REASON_COLORS: Record<string, string> = {
   '笑い': 'bg-yellow-900 text-yellow-300',
@@ -48,18 +54,46 @@ const REASON_COLORS: Record<string, string> = {
 export default function MagazineWeekPage() {
   const { week } = useParams<{ week: string }>()
   const [magazine, setMagazine] = useState<Magazine | null>(null)
+  const [streamMap, setStreamMap] = useState<Record<string, StreamInfo>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase
-      .from('magazines')
-      .select('*')
-      .eq('week_label', week)
-      .single()
-      .then(({ data }) => {
-        if (data) setMagazine(data as Magazine)
-        setLoading(false)
-      })
+    let cancelled = false
+
+    const load = async () => {
+      const { data } = await supabase
+        .from('magazines')
+        .select('*')
+        .eq('week_label', week)
+        .single()
+
+      if (cancelled) return
+
+      if (data) {
+        const mag = data as Magazine
+        setMagazine(mag)
+
+        // stream_ids から動画情報を取得して video_id ベースのマップを構築
+        if (mag.stream_ids && mag.stream_ids.length > 0) {
+          const { data: streams } = await supabase
+            .from('streams')
+            .select('video_id, title, stream_date')
+            .in('id', mag.stream_ids)
+
+          if (!cancelled && streams) {
+            const map: Record<string, StreamInfo> = {}
+            for (const s of streams as { video_id: string; title: string; stream_date: string }[]) {
+              map[s.video_id] = { title: s.title, stream_date: s.stream_date }
+            }
+            setStreamMap(map)
+          }
+        }
+      }
+      setLoading(false)
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [week])
 
   if (loading) return (
@@ -149,14 +183,22 @@ export default function MagazineWeekPage() {
                 const mm = Math.floor((h.start_sec || 0) / 60)
                 const ss = (h.start_sec || 0) % 60
                 const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
+                const streamTitle = streamMap[h.video_id]?.title
                 return (
                   <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
-                    <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">{timestamp}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
-                      {h.reason}
-                    </span>
-                    <span className="text-sm text-gray-200 leading-snug">「{h.quote}」</span>
+                    className="block px-4 py-3 hover:bg-gray-800 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">{timestamp}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
+                        {h.reason}
+                      </span>
+                      <span className="text-sm text-gray-200 leading-snug">「{h.quote}」</span>
+                    </div>
+                    {streamTitle && (
+                      <p className="text-xs text-gray-500 mt-1.5 pl-1 truncate">
+                        from: {streamTitle}
+                      </p>
+                    )}
                   </a>
                 )
               })}
@@ -180,11 +222,29 @@ export default function MagazineWeekPage() {
         {content.songs?.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-xs text-gray-500 font-medium uppercase tracking-wider">今週流れた曲</h2>
-            <div className="flex flex-wrap gap-2">
-              {content.songs.map((s, i) => (
-                <span key={i} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{s}</span>
-              ))}
-            </div>
+            <ul className="space-y-1">
+              {content.songs.map((s, i) => {
+                // 旧形式（文字列）はフォールバックで曲名のみ
+                if (typeof s === 'string') {
+                  return (
+                    <li key={i} className="text-sm text-gray-300">
+                      <span className="text-gray-500 mr-2">♪</span>{s}
+                    </li>
+                  )
+                }
+                // 新形式（オブジェクト）は動画タイトル併記
+                const streamTitle = s.video_id ? streamMap[s.video_id]?.title : undefined
+                return (
+                  <li key={i} className="text-sm text-gray-300">
+                    <span className="text-gray-500 mr-2">♪</span>
+                    {s.title}
+                    {streamTitle && (
+                      <span className="text-xs text-gray-500 ml-2">from: {streamTitle}</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           </section>
         )}
 
