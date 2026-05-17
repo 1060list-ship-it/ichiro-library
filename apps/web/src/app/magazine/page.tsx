@@ -28,7 +28,7 @@ export default function MagazinePage() {
   useEffect(() => {
     supabase
       .from('magazines')
-      .select('id, week_label, week_start, week_end, content, generated_at')
+      .select('id, week_label, week_start, week_end, content, cover_image_url, generated_at')
       .order('week_label', { ascending: false })
       .limit(20)
       .then(({ data }) => {
@@ -49,43 +49,42 @@ export default function MagazinePage() {
         <div className="w-16" />
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-2xl mx-auto px-4 py-4">
         {magazines.length === 0 ? (
           <p className="text-gray-500 text-sm text-center py-12">まだマガジンがありません</p>
         ) : (
-          magazines.map(mag => {
-            const start = new Date(mag.week_start).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
-            const end = new Date(mag.week_end).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
-            return (
-              <Link key={mag.id} href={`/magazine/${mag.week_label}`}
-                className="block bg-gray-900 rounded-lg overflow-hidden hover:bg-gray-800 transition-colors">
-                <div className="relative w-full aspect-video overflow-hidden">
-                  {mag.cover_image_url ? (
-                    <img src={mag.cover_image_url} alt={mag.content.headline}
-                      className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-indigo-950 to-gray-900" />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 to-transparent" />
-                  <div className="absolute bottom-2 left-3 right-3">
-                    <p className="text-xs text-gray-400">{start} 〜 {end}</p>
-                    <p className="text-sm font-bold text-white leading-snug line-clamp-1">{mag.content.headline}</p>
+          <div className="divide-y divide-gray-800">
+            {magazines.map(mag => {
+              const start = new Date(mag.week_start).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
+              const end = new Date(mag.week_end).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
+              return (
+                <Link key={mag.id} href={`/magazine/${mag.week_label}`}
+                  className="flex gap-3 py-3 hover:bg-gray-900 transition-colors -mx-2 px-2 rounded-lg">
+                  <div className="flex-shrink-0 w-20 h-14 rounded overflow-hidden bg-gradient-to-br from-indigo-950 to-gray-900">
+                    {mag.cover_image_url ? (
+                      <img src={mag.cover_image_url} alt={mag.content.headline}
+                        className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full" />
+                    )}
                   </div>
-                </div>
-                <div className="p-4">
-                  <h2 className="text-base font-bold text-white mb-1">{mag.content.headline}</h2>
-                  <p className="text-sm text-gray-300 leading-relaxed line-clamp-2">{mag.content.intro}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {mag.content.topics.slice(0, 4).map((t, i) => (
-                      <span key={i} className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">
-                        {t.title}
-                      </span>
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-500 mb-0.5">{start}〜{end}</p>
+                    <p className="text-sm font-bold text-white leading-snug line-clamp-1 mb-1">
+                      {mag.content.headline}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {mag.content.topics.slice(0, 3).map((t, i) => (
+                        <span key={i} className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                          {t.title}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </Link>
-            )
-          })
+                </Link>
+              )
+            })}
+          </div>
         )}
       </div>
     </main>
