@@ -34,6 +34,7 @@ type Magazine = {
   week_start: string
   week_end: string
   content: MagazineContent
+  cover_image_url: string | null
 }
 
 const REASON_COLORS: Record<string, string> = {
@@ -82,10 +83,39 @@ export default function MagazineWeekPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-8">
 
-        {/* ヘッダー */}
-        <div className="space-y-2">
-          <p className="text-xs text-gray-500">{start} 〜 {end}</p>
-          <h1 className="text-xl font-bold leading-snug">{content.headline}</h1>
+        {/* カバー画像 */}
+        {magazine.cover_image_url ? (
+          <div className="relative w-full aspect-square rounded-xl overflow-hidden">
+            <img
+              src={magazine.cover_image_url}
+              alt={content.headline}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 via-transparent to-transparent" />
+            <div className="absolute bottom-4 left-4 right-4">
+              <p className="text-xs text-gray-400 mb-1">{start} 〜 {end}</p>
+              <h1 className="text-lg font-bold leading-snug text-white drop-shadow">{content.headline}</h1>
+            </div>
+            <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-gray-300 font-medium">
+              いっくん追いかけマガジン
+            </div>
+          </div>
+        ) : (
+          <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-indigo-950 via-gray-900 to-gray-950 flex items-end">
+            <div className="absolute inset-0 opacity-20"
+              style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, #6366f1 0%, transparent 60%), radial-gradient(circle at 70% 70%, #0ea5e9 0%, transparent 50%)' }} />
+            <div className="relative p-4 w-full">
+              <p className="text-xs text-gray-400 mb-1">{start} 〜 {end}</p>
+              <h1 className="text-lg font-bold leading-snug text-white">{content.headline}</h1>
+            </div>
+            <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-gray-300 font-medium">
+              いっくん追いかけマガジン
+            </div>
+          </div>
+        )}
+
+        {/* イントロ */}
+        <div>
           <p className="text-sm text-gray-300 leading-relaxed">{content.intro}</p>
         </div>
 

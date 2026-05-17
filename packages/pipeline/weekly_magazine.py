@@ -11,18 +11,41 @@ import logging
 import argparse
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env.local")
 
 from supabase import create_client
 from google import genai
+from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("weekly_magazine")
 
 MODEL_NAME = "gemini-2.5-flash"
+IMAGE_MODEL = "gemini-2.5-flash-image"
+STORAGE_BUCKET = "magazine-covers"
+
+COVER_PROMPT_TEMPLATE = """You are an art director for a Japanese weekly music magazine called "いっくん追いかけマガジン".
+Generate an image generation prompt (in English, max 80 words) for this week's cover illustration.
+
+FIXED STYLE (always include these):
+- editorial magazine cover illustration
+- minimal Japanese aesthetic, muted cool tones with one accent color
+- soft analog film grain, indie zine vibes
+- abstract composition, NO text, NO legible characters, NO logos, NO realistic faces
+- if a human figure appears, silhouette only
+
+THIS WEEK'S CONTENT:
+- Headline: {headline}
+- Topics: {topics}
+- Songs featured: {songs}
+- Mood distribution: {mood}
+- Key motifs to consider: water, fish, night cityscape, music, microphone, guitar
+
+Generate the image prompt now. Output the prompt only, nothing else."""
 
 MAGAZINE_PROMPT = """あなたは「いっくん追いかけマガジン」の編集者です。
 山口一郎（サカナクション）のYouTubeライブ配信を追えないファンのために、1週間分の配信内容をマガジン形式でまとめてください。
@@ -95,6 +118,74 @@ def week_label(monday: date) -> str:
 def _generate(client, prompt: str) -> str:
     response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
     return response.text.strip()
+
+
+def _mood_from_highlights(highlights: list) -> str:
+    from collections import Counter
+    reasons = [h.get("reason", "") for h in highlights if h.get("reason")]
+    if not reasons:
+        return "balanced"
+    most_common = Counter(reasons).most_common(1)[0][0]
+    mapping = {"笑い": "lighthearted and fun", "名言": "thoughtful and inspiring",
+               "感動": "emotional and moving", "驚き": "surprising and energetic", "神回": "legendary and epic"}
+    return mapping.get(most_common, "balanced")
+
+
+def generate_cover_image(client, content: dict, label: str, sb) -> Optional[str]:
+    try:
+        all_highlights = content.get("highlights", [])
+        mood = _mood_from_highlights(all_highlights)
+        topics = ", ".join(t["title"] for t in content.get("topics", []))
+        songs = ", ".join(content.get("songs", [])[:5])
+
+        cover_prompt_request = COVER_PROMPT_TEMPLATE.format(
+            headline=content.get("headline", ""),
+            topics=topics,
+            songs=songs,
+            mood=mood,
+        )
+
+        logger.info(f"[{label}] カバープロンプト生成中...")
+        prompt_response = _generate(client, cover_prompt_request)
+        image_prompt = prompt_response.strip()
+        logger.info(f"[{label}] 画像プロンプト: {image_prompt[:80]}...")
+
+        logger.info(f"[{label}] カバー画像生成中 (Gemini image generation)...")
+        image_response = client.models.generate_content(
+            model=IMAGE_MODEL,
+            contents=image_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"]
+            )
+        )
+        image_bytes = None
+        for part in image_response.candidates[0].content.parts:
+            if hasattr(part, "inline_data") and part.inline_data:
+                image_bytes = part.inline_data.data
+                break
+        if not image_bytes:
+            raise ValueError("画像データが返されませんでした")
+
+        file_path = f"{label}.png"
+        sb.storage.from_(STORAGE_BUCKET).upload(
+            path=file_path,
+            file=image_bytes,
+            file_options={"content-type": "image/png", "upsert": "true"},
+        )
+        public_url = sb.storage.from_(STORAGE_BUCKET).get_public_url(file_path)
+        logger.info(f"[{label}] カバー画像アップロード完了: {public_url}")
+
+        sb.table("magazines").update({
+            "cover_image_url": public_url,
+            "cover_prompt": image_prompt,
+            "cover_generated_at": "now()",
+        }).eq("week_label", label).execute()
+
+        return public_url
+
+    except Exception as e:
+        logger.error(f"[{label}] カバー画像生成失敗（マガジン本体は保存済み）: {e}")
+        return None
 
 
 def generate_magazine(target_date: date = None):
@@ -189,6 +280,9 @@ def generate_magazine(target_date: date = None):
         }).execute()
 
     logger.info(f"[{label}] magazinesテーブルに保存完了")
+
+    generate_cover_image(client, content, label, sb)
+
     return content
 
 
