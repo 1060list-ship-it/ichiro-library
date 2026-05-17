@@ -74,6 +74,35 @@ ichiro-library/
 └── src/                        # Next.js フロントエンド（Phase 3 で実装）
 ```
 
+## Phase 4: パイプラインジョブ運用
+
+### `pipeline_jobs` migration の適用
+
+1. Supabase ダッシュボードの **SQL Editor** を開く
+2. `supabase/migrations/004_pipeline_jobs.sql` の内容を貼り付けて実行
+3. `pipeline_jobs` テーブルと `idx_pipeline_jobs_pending` が作成されたことを確認
+
+### worker の手動実行
+
+```bash
+cd packages/pipeline
+python worker.py
+```
+
+ジョブを安全に確認だけしたい場合:
+
+```bash
+cd packages/pipeline
+python worker.py --dry-run
+```
+
+### cron 登録例
+
+```bash
+# 15分ごとに worker.py を実行
+*/15 * * * * cd /path/to/ichiro-library/packages/pipeline && python worker.py >> /tmp/ichiro-worker.log 2>&1
+```
+
 ## 開発フェーズ
 
 | Phase | 内容 | 状態 |

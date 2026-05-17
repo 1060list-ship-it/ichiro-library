@@ -4,8 +4,42 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { Stream, Chapter } from '@/lib/types'
+import type { Stream, Chapter, Highlight } from '@/lib/types'
 import ChapterList from '@/components/ChapterList'
+
+const REASON_COLORS: Record<string, string> = {
+  '笑い':  'bg-yellow-900 text-yellow-300',
+  '名言':  'bg-blue-900 text-blue-300',
+  '感動':  'bg-pink-900 text-pink-300',
+  '驚き':  'bg-orange-900 text-orange-300',
+  '神回':  'bg-purple-900 text-purple-300',
+}
+
+function HighlightList({ highlights, videoId }: { highlights: Highlight[]; videoId: string }) {
+  return (
+    <div className="bg-gray-900 rounded-lg overflow-hidden">
+      <p className="text-xs text-gray-500 font-medium px-4 pt-4 pb-2">切り抜きポイント</p>
+      <div className="divide-y divide-gray-800">
+        {highlights.map((h, i) => {
+          const mm = Math.floor(h.start_sec / 60)
+          const ss = h.start_sec % 60
+          const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
+          const url = `https://www.youtube.com/watch?v=${videoId}&t=${h.start_sec}`
+          return (
+            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+              className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
+              <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">{timestamp}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
+                {h.reason}
+              </span>
+              <span className="text-sm text-gray-200 leading-snug">「{h.quote}」</span>
+            </a>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export default function StreamPage() {
   const { id } = useParams<{ id: string }>()
@@ -84,6 +118,11 @@ export default function StreamPage() {
             <p className="text-xs text-gray-500 font-medium">AI要約</p>
             <p className="text-sm text-gray-200 leading-relaxed">{stream.summary}</p>
           </div>
+        )}
+
+        {/* ハイライト */}
+        {stream.highlights && stream.highlights.length > 0 && (
+          <HighlightList highlights={stream.highlights} videoId={stream.video_id} />
         )}
 
         {/* チャプター */}

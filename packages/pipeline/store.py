@@ -9,6 +9,16 @@ from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
+_REVIEW_LOCKED_FIELDS = [
+    "summary",
+    "tags",
+    "corner_names",
+    "guests",
+    "songs",
+    "has_live_singing",
+    "talk_topics",
+]
+
 
 def get_supabase_client() -> Client:
     url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -23,11 +33,22 @@ def get_existing_video_ids(client: Client) -> set[str]:
     return {row["video_id"] for row in (resp.data or [])}
 
 
-def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict]) -> str:
+def get_existing_stream(client: Client, video_id: str) -> Optional[dict]:
+    resp = client.table("streams").select(
+        "id,is_reviewed,summary,tags,corner_names,guests,songs,has_live_singing,talk_topics"
+    ).eq("video_id", video_id).limit(1).execute()
+    rows = resp.data or []
+    return rows[0] if rows else None
+
+
+def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict]) -> tuple[str, bool]:
     """
     streams テーブルに1件 upsert する。
-    戻り値: 登録された streams.id (UUID)
+    戻り値: (登録された streams.id, レビュー済み動画か)
     """
+    existing = get_existing_stream(client, video_meta["video_id"])
+    is_review_locked = bool(existing and existing.get("is_reviewed"))
+
     status = "public"
     if not transcript_text:
         status = "transcript_failed"
@@ -46,7 +67,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "thumbnail_url": video_meta.get("thumbnail_url"),
         "transcript":    transcript_text or None,
         "status":        status,
-        "is_reviewed":   False,
+        "is_reviewed":   is_review_locked,
         "ai_model":      "gemini-1.5-flash" if ai_result else None,
         "ai_prompt_ver": "v1" if ai_result else None,
     }
@@ -59,11 +80,17 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         row["songs"]           = ai_result.get("songs", [])
         row["has_live_singing"] = ai_result.get("has_live_singing", False)
         row["talk_topics"]     = ai_result.get("talk_topics", [])
+        row["highlights"]      = ai_result.get("highlights", [])
+
+    if is_review_locked and existing:
+        for field in _REVIEW_LOCKED_FIELDS:
+            row[field] = existing.get(field)
+        logger.info(f"[{video_meta['video_id']}] レビュー済みのため手動編集フィールドを保持")
 
     resp = client.table("streams").upsert(row, on_conflict="video_id").execute()
     stream_id = resp.data[0]["id"]
     logger.info(f"[{video_meta['video_id']}] streams upsert 完了: {stream_id}")
-    return stream_id
+    return stream_id, is_review_locked
 
 
 def insert_chapters(client: Client, stream_id: str, chapters: list[dict]):

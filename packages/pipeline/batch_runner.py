@@ -61,7 +61,7 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
         logger.info(f"  ai_result keys: {list(ai_result.keys()) if ai_result else None}")
         return transcript_result.source != "failed"
 
-    stream_id = upsert_stream(
+    stream_id, is_review_locked = upsert_stream(
         client=supabase_client,
         video_meta=video_meta,
         transcript_text=transcript_result.text,
@@ -69,7 +69,9 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
         ai_result=ai_result,
     )
 
-    if ai_result and ai_result.get("chapters"):
+    if is_review_locked:
+        logger.info(f"[{video_id}] レビュー済みのためチャプター更新をスキップ")
+    elif ai_result and ai_result.get("chapters"):
         insert_chapters(supabase_client, stream_id, ai_result["chapters"])
 
     logger.info(f"=== 処理完了: {video_id} ===")

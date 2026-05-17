@@ -1,8 +1,4 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+# Repository Rules
 
 ## Secret Handling
 - Never print values from `.env`, `.env.local`, `.env.*`, or any other environment files.
@@ -10,3 +6,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - When verifying configuration, report only whether a value is `present`, `missing`, or masked.
 - If a secret appeared earlier in the conversation or terminal output, do not repeat it.
 - Prefer describing the file path and variable name over showing the value.
+
+## Scope
+- Apply these rules to every app and package in this repository unless a deeper `AGENTS.md` adds stricter constraints.

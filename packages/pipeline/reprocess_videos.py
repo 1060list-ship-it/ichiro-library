@@ -33,6 +33,10 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
     stream_id = row["id"]
     transcript_text = row.get("transcript") or ""
 
+    if row.get("is_reviewed"):
+        logger.info(f"[{video_id}] レビュー済みのため再処理をスキップ")
+        return
+
     if not transcript_text:
         logger.warning(f"[{video_id}] 字幕なし、スキップ")
         return
@@ -57,7 +61,8 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
         "songs":          ai_result.get("songs", []),
         "talk_topics":    ai_result.get("talk_topics", []),
         "has_live_singing": ai_result.get("has_live_singing", False),
-        "ai_prompt_ver":  "v1",
+        "highlights":     ai_result.get("highlights", []),
+        "ai_prompt_ver":  "v2",
     }).eq("video_id", video_id).execute()
 
     chapters = ai_result.get("chapters", [])

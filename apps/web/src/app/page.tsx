@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Stream } from '@/lib/types'
 import StreamCard from '@/components/StreamCard'
@@ -8,7 +8,7 @@ import SearchBar from '@/components/SearchBar'
 
 const CATEGORIES = [
   { key: 'ranking-view',   label: '再生数' },
-  { key: 'ranking-god',    label: '支持率' },
+  { key: 'ranking-waiwai', label: 'ワイワイ' },
   { key: 'ライブビデオ解説', label: 'ライブビデオ解説' },
   { key: '深夜対談',        label: '深夜対談' },
   { key: '未知との遭遇',    label: '未知との遭遇' },
@@ -22,6 +22,7 @@ export default function Home() {
   const [view, setView] = useState<View>('top')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [fuzzy, setFuzzy] = useState(false)
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -30,20 +31,26 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [query])
 
-  useEffect(() => {
-    fetchStreams()
-  }, [view, debouncedQuery])
-
-  async function fetchStreams() {
+  const fetchStreams = useCallback(async () => {
     setLoading(true)
     let data: Stream[] = []
 
     if (debouncedQuery.trim()) {
-      const res = await supabase
-        .from('streams').select('*')
-        .or(`title.ilike.%${debouncedQuery}%,summary.ilike.%${debouncedQuery}%`)
-        .order('stream_date', { ascending: false }).limit(20)
-      data = res.data ?? []
+      if (fuzzy) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await (supabase as any).rpc('search_streams', {
+          query: debouncedQuery,
+          sort_by: 'date_desc',
+          page_num: 1,
+          page_size: 20,
+        })
+        data = (res.data ?? []) as Stream[]
+      } else {
+        const res = await supabase.from('streams').select('*')
+          .or(`title.ilike.%${debouncedQuery}%,summary.ilike.%${debouncedQuery}%`)
+          .order('stream_date', { ascending: false }).limit(20)
+        data = res.data ?? []
+      }
     } else if (view === 'top') {
       const res = await supabase.from('streams').select('*')
         .order('stream_date', { ascending: false }).limit(10)
@@ -52,14 +59,11 @@ export default function Home() {
       const res = await supabase.from('streams').select('*')
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
-    } else if (view === 'ranking-god') {
+    } else if (view === 'ranking-waiwai') {
       const res = await supabase.from('streams').select('*')
-        .not('like_count', 'is', null).not('view_count', 'is', null)
-        .order('like_count', { ascending: false }).limit(20)
-      const godData = (res.data ?? []) as Stream[]
-      data = godData.sort((a, b) =>
-        (b.like_count! / (b.view_count || 1)) - (a.like_count! / (a.view_count || 1))
-      )
+        .not('comment_count', 'is', null)
+        .order('comment_count', { ascending: false }).limit(20)
+      data = res.data ?? []
     } else if (view === '歌唱あり') {
       const res = await supabase.from('streams').select('*')
         .eq('has_live_singing', true)
@@ -85,11 +89,15 @@ export default function Home() {
 
     setStreams(data)
     setLoading(false)
-  }
+  }, [view, debouncedQuery, fuzzy])
+
+  useEffect(() => {
+    fetchStreams()
+  }, [fetchStreams])
 
   const isSearching = debouncedQuery.trim().length > 0
   const currentLabel = CATEGORIES.find(c => c.key === view)?.label
-  const showRank = view === 'ranking-view' || view === 'ranking-god'
+  const showRank = view === 'ranking-view' || view === 'ranking-waiwai'
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -104,7 +112,7 @@ export default function Home() {
       </header>
 
       {/* カテゴリナビゲーション */}
-      <nav className="border-b border-gray-800 px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide justify-center">
+      <nav className="border-b border-gray-800 px-4 py-2 flex flex-wrap gap-2 justify-center">
         {CATEGORIES.map(cat => (
           <button
             key={cat.key}
@@ -121,7 +129,7 @@ export default function Home() {
       </nav>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-        <SearchBar value={query} onChange={setQuery} />
+        <SearchBar value={query} onChange={setQuery} fuzzy={fuzzy} onFuzzyChange={setFuzzy} />
 
         {/* セクションタイトル */}
         <div className="flex items-center gap-3">
@@ -145,7 +153,7 @@ export default function Home() {
             {isSearching ? '該当する配信が見つかりません' : '該当する配信がまだありません'}
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {streams.map((s, i) => (
               <StreamCard key={s.id} stream={s} rank={showRank ? i + 1 : undefined} />
             ))}

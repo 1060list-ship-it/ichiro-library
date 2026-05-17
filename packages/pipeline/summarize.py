@@ -3,6 +3,7 @@ Gemini 1.5 Flash で字幕テキストを要約・構造化するモジュール
 """
 
 import os
+import re
 import json
 import logging
 from pathlib import Path
@@ -12,7 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.txt"
 MODEL_NAME = "gemini-2.5-flash"
 
@@ -53,16 +54,14 @@ def summarize(transcript_text: str, model=None) -> Optional[dict]:
         response = _generate_with_retry(model, prompt)
         raw = response.text.strip()
 
-        # JSONブロックが含まれていた場合に除去
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
+        # ```json...``` ブロックがあれば中身だけ取り出す（前置きテキストがあっても対応）
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+        if m:
+            raw = m.group(1).strip()
 
         result = json.loads(raw)
         _validate_result(result)
-        logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, tags={result.get('tags', [])}")
+        logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, highlights={len(result.get('highlights', []))}, tags={result.get('tags', [])}")
         return result
 
     except json.JSONDecodeError as e:
