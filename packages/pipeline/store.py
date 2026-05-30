@@ -90,6 +90,18 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
     resp = client.table("streams").upsert(row, on_conflict="video_id").execute()
     stream_id = resp.data[0]["id"]
     logger.info(f"[{video_meta['video_id']}] streams upsert 完了: {stream_id}")
+
+    try:
+        from extract_entities import find_entity_ids, load_entities, save_stream_entities, stream_text
+
+        enriched_row = {**row, "id": stream_id}
+        entities = load_entities(client)
+        entity_ids = find_entity_ids(stream_text(enriched_row), entities)
+        count = save_stream_entities(client, stream_id, entity_ids)
+        logger.info(f"[{video_meta['video_id']}] stream_entities 保存完了: {count}件")
+    except Exception as exc:
+        logger.warning(f"[{video_meta['video_id']}] stream_entities 保存をスキップ: {exc}")
+
     return stream_id, is_review_locked
 
 

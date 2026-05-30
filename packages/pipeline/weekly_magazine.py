@@ -21,6 +21,8 @@ from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from extract_entities import find_entity_ids, load_entities, magazine_text, save_magazine_entities
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("weekly_magazine")
 
@@ -284,6 +286,15 @@ def generate_magazine(target_date: date = None):
         }).execute()
 
     logger.info(f"[{label}] magazinesテーブルに保存完了")
+
+    try:
+        mag_res = sb.table("magazines").select("id, content").eq("week_label", label).single().execute()
+        entities = load_entities(sb)
+        entity_ids = find_entity_ids(magazine_text(mag_res.data), entities)
+        count = save_magazine_entities(sb, mag_res.data["id"], entity_ids)
+        logger.info(f"[{label}] magazine_entities 保存完了: {count}件")
+    except Exception as e:
+        logger.warning(f"[{label}] magazine_entities 保存をスキップ: {e}")
 
     generate_cover_image(client, content, label, sb)
 
