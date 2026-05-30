@@ -221,9 +221,15 @@ def generate_magazine(target_date: date = None):
         sys.exit(1)
 
     # 今週の配信を取得
-    streams_res = sb.table("streams").select(
-        "id, video_id, title, stream_date, started_at, summary, tags, corner_names, guests, songs, highlights, talk_topics"
-    ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("started_at", nullsfirst=False).execute()
+    # started_at カラムは migration 009 適用後に有効。未適用時は stream_date でフォールバック
+    try:
+        streams_res = sb.table("streams").select(
+            "id, video_id, title, stream_date, started_at, summary, tags, corner_names, guests, songs, highlights, talk_topics"
+        ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("started_at", nullsfirst=False).execute()
+    except Exception:
+        streams_res = sb.table("streams").select(
+            "id, video_id, title, stream_date, summary, tags, corner_names, guests, songs, highlights, talk_topics"
+        ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("stream_date").execute()
 
     streams = streams_res.data
     if not streams:
@@ -289,17 +295,21 @@ def generate_magazine(target_date: date = None):
             "generated_at": "now()",
         }).eq("week_label", label).execute()
     else:
-        # 新規発行時に号数を採番（現在の最大号数 + 1）
-        max_issue = sb.table("magazines").select("issue_number").order("issue_number", desc=True).limit(1).execute()
-        issue_number = (max_issue.data[0]["issue_number"] or 0) + 1 if max_issue.data else 1
-        sb.table("magazines").insert({
+        # 新規発行時に号数を採番（migration 010 未適用時はフォールバック）
+        insert_row = {
             "week_label": label,
             "week_start": monday.isoformat(),
             "week_end": sunday.isoformat(),
             "content": content,
             "stream_ids": stream_ids,
-            "issue_number": issue_number,
-        }).execute()
+        }
+        try:
+            max_issue = sb.table("magazines").select("issue_number").order("issue_number", desc=True).limit(1).execute()
+            issue_number = (max_issue.data[0]["issue_number"] or 0) + 1 if max_issue.data else 1
+            insert_row["issue_number"] = issue_number
+        except Exception:
+            logger.warning(f"[{label}] issue_number カラム未適用のためスキップ（migration 010 を適用してください）")
+        sb.table("magazines").insert(insert_row).execute()
 
     logger.info(f"[{label}] magazinesテーブルに保存完了")
 
