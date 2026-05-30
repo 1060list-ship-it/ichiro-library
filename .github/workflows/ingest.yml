@@ -1,0 +1,83 @@
+name: Daily Video Ingest
+
+on:
+  schedule:
+    # 毎日 06:00 JST (21:00 UTC 前日) に実行
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: '何日前まで遡るか（デフォルト: 3）'
+        required: false
+        default: '3'
+      max_videos:
+        description: '最大処理件数（0=無制限）'
+        required: false
+        default: '10'
+      dry_run:
+        description: 'dry-run（書き込みなし）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      SUPADATA_API_KEY: ${{ secrets.SUPADATA_API_KEY }}
+      YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: packages/pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r packages/pipeline/requirements.txt
+          pip install tenacity
+
+      # YouTube cookies をシークレットから復元（YOUTUBE_COOKIES_B64 が設定されている場合のみ）
+      - name: Restore YouTube cookies
+        run: |
+          if [ -n "$YOUTUBE_COOKIES_B64" ]; then
+            echo "$YOUTUBE_COOKIES_B64" | base64 -d > /tmp/youtube_cookies.txt
+            echo "YOUTUBE_COOKIES_PATH=/tmp/youtube_cookies.txt" >> "$GITHUB_ENV"
+            echo "cookies restored"
+          else
+            echo "YOUTUBE_COOKIES_B64 not set, skipping"
+          fi
+
+      - name: Validate and run ingest
+        env:
+          # workflow_dispatch 入力値は env: 経由で受け取り、run: 内では $ENV_VAR として参照する
+          INPUT_DAYS: ${{ github.event.inputs.days || '3' }}
+          INPUT_MAX: ${{ github.event.inputs.max_videos || '10' }}
+          INPUT_DRY: ${{ github.event.inputs.dry_run || 'false' }}
+        working-directory: packages/pipeline
+        run: |
+          # 数値バリデーション（インジェクション防止）
+          if ! echo "$INPUT_DAYS" | grep -qE '^[0-9]+$'; then
+            echo "ERROR: days must be a number" && exit 1
+          fi
+          if ! echo "$INPUT_MAX" | grep -qE '^[0-9]+$'; then
+            echo "ERROR: max_videos must be a number" && exit 1
+          fi
+
+          ARGS="--days $INPUT_DAYS --max-videos $INPUT_MAX"
+          if [ "$INPUT_DRY" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          python batch_runner.py $ARGS
