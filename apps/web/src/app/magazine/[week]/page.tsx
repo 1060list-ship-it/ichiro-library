@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { linkifyEntities } from '@/lib/linkify'
+import type { Entity } from '@/lib/types'
 
 // -----------------------------------------------------------------------
 // 型定義（kusanagiのstream_idsロジックと整合）
@@ -92,9 +94,11 @@ function StreamSourceBadge({ title }: { title: string }) {
 function HighlightsSection({
   highlights,
   streamMap,
+  entities,
 }: {
   highlights: Highlight[]
   streamMap: Record<string, StreamInfo>
+  entities: Entity[]
 }) {
   /**
    * 配信タイトルでグルーピング。
@@ -145,12 +149,9 @@ function HighlightsSection({
                 const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
 
                 return (
-                  <a
+                  <div
                     key={i}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group block px-4 py-3.5 hover:bg-gray-800/50 transition-colors"
+                    className="group px-4 py-3.5 hover:bg-gray-800/50 transition-colors"
                   >
                     <div className="flex items-start gap-3">
                       {/* タイムスタンプ */}
@@ -165,8 +166,17 @@ function HighlightsSection({
 
                       {/* 発言内容 */}
                       <span className="text-sm text-gray-200 leading-relaxed flex-1">
-                        「{h.quote}」
+                        「{linkifyEntities(h.quote, entities)}」
                       </span>
+
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0 mt-0.5"
+                      >
+                        YouTube
+                      </a>
                     </div>
 
                     {/* グルーピングなし時の出所表示（フォールバック） */}
@@ -175,14 +185,14 @@ function HighlightsSection({
                         <StreamSourceBadge title={streamMap[h.video_id].title} />
                       </div>
                     )}
-                  </a>
+                  </div>
                 )
               })}
             </div>
           </div>
         ))}
       </div>
-      <p className="text-xs text-gray-700 mt-2 px-1">行をタップするとYouTubeの該当シーンが開きます</p>
+      <p className="text-xs text-gray-700 mt-2 px-1">YouTubeリンクから該当シーンが開きます</p>
     </section>
   )
 }
@@ -194,9 +204,11 @@ function HighlightsSection({
 function SongsSection({
   songs,
   streamMap,
+  entities,
 }: {
   songs: Song[]
   streamMap: Record<string, StreamInfo>
+  entities: Entity[]
 }) {
   return (
     <section>
@@ -218,31 +230,26 @@ function SongsSection({
               </span>
               {/* 曲名 */}
               <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-sm text-gray-200 leading-snug">{title}</p>
+                <p className="text-sm text-gray-200 leading-snug">{linkifyEntities(title, entities)}</p>
                 {streamTitle && (
                   <StreamSourceBadge title={streamTitle} />
                 )}
               </div>
               {/* YouTubeリンクアイコン */}
               {youtubeUrl && (
-                <span className="text-xs text-indigo-500 flex-shrink-0">→</span>
+                <a
+                  href={youtubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0"
+                >
+                  YouTube
+                </a>
               )}
             </div>
           )
 
-          return youtubeUrl ? (
-            <a
-              key={i}
-              href={youtubeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block hover:bg-gray-800/50 transition-colors"
-            >
-              {inner}
-            </a>
-          ) : (
-            <div key={i}>{inner}</div>
-          )
+          return <div key={i} className="hover:bg-gray-800/50 transition-colors">{inner}</div>
         })}
       </div>
     </section>
@@ -257,6 +264,7 @@ export default function MagazineWeekPage() {
   const { week } = useParams<{ week: string }>()
   const [magazine, setMagazine] = useState<Magazine | null>(null)
   const [streamMap, setStreamMap] = useState<Record<string, StreamInfo>>({})
+  const [entities, setEntities] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -274,6 +282,21 @@ export default function MagazineWeekPage() {
       if (data) {
         const mag = data as Magazine
         setMagazine(mag)
+
+        const { data: entityRows } = await supabase
+          .from('magazine_entities')
+          .select('entity_id')
+          .eq('magazine_id', mag.id)
+
+        if (!cancelled && entityRows?.length) {
+          const entityIds = (entityRows as unknown as { entity_id: string }[]).map((row) => row.entity_id)
+          const { data: entityData } = await supabase
+            .from('entities')
+            .select('*')
+            .in('id', entityIds)
+
+          if (!cancelled && entityData) setEntities(entityData as Entity[])
+        }
 
         // stream_ids から動画情報を取得して video_id ベースのマップを構築
         if (mag.stream_ids && mag.stream_ids.length > 0) {
@@ -375,7 +398,7 @@ export default function MagazineWeekPage() {
 
         {/* イントロ */}
         <div className="border-l-2 border-gray-700 pl-4">
-          <p className="text-sm text-gray-300 leading-relaxed">{content.intro}</p>
+          <p className="text-sm text-gray-300 leading-relaxed">{linkifyEntities(content.intro, entities)}</p>
         </div>
 
         {/* トピック */}
@@ -385,8 +408,8 @@ export default function MagazineWeekPage() {
             <div className="space-y-3">
               {content.topics.map((topic, i) => (
                 <div key={i} className="bg-gray-900 rounded-xl p-4 space-y-2">
-                  <h3 className="text-sm font-bold text-white">{topic.title}</h3>
-                  <p className="text-sm text-gray-300 leading-relaxed">{topic.body}</p>
+                  <h3 className="text-sm font-bold text-white">{linkifyEntities(topic.title, entities)}</h3>
+                  <p className="text-sm text-gray-300 leading-relaxed">{linkifyEntities(topic.body, entities)}</p>
                   {topic.streams?.length > 0 && (
                     <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-800/80 mt-2">
                       {topic.streams.map((s, j) => (
@@ -409,7 +432,7 @@ export default function MagazineWeekPage() {
 
         {/* 盛り上がり */}
         {content.highlights?.length > 0 && (
-          <HighlightsSection highlights={content.highlights} streamMap={streamMap} />
+          <HighlightsSection highlights={content.highlights} streamMap={streamMap} entities={entities} />
         )}
 
         {/* ゲスト */}
@@ -422,7 +445,7 @@ export default function MagazineWeekPage() {
                   key={i}
                   className="text-sm text-emerald-300 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1 rounded-full"
                 >
-                  {g}
+                  {linkifyEntities(g, entities)}
                 </span>
               ))}
             </div>
@@ -431,14 +454,14 @@ export default function MagazineWeekPage() {
 
         {/* 楽曲 */}
         {content.songs?.length > 0 && (
-          <SongsSection songs={content.songs} streamMap={streamMap} />
+          <SongsSection songs={content.songs} streamMap={streamMap} entities={entities} />
         )}
 
         {/* 編集後記 */}
         {content.editor_note && (
           <section className="border-t border-gray-800/80 pt-8">
             <p className="text-xs text-gray-600 mb-2 uppercase tracking-widest">編集後記</p>
-            <p className="text-sm text-gray-400 leading-relaxed">{content.editor_note}</p>
+            <p className="text-sm text-gray-400 leading-relaxed">{linkifyEntities(content.editor_note, entities)}</p>
           </section>
         )}
 

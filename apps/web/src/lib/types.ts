@@ -53,6 +53,31 @@ export type Rating = {
   created_at: string
 }
 
+export type Entity = {
+  id: string
+  slug: string
+  name: string
+  match_names: string[]
+  category: 'family' | 'celebrity' | 'remixer' | 'team' | 'craftsman' | 'product' | 'project' | string
+  role: string | null
+  description: string
+  related_work: string | null
+  external_url: string | null
+  sort_order: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type StreamEntity = {
+  stream_id: string
+  entity_id: string
+}
+
+export type MagazineEntity = {
+  magazine_id: string
+  entity_id: string
+}
+
 export type SearchStreamsArgs = {
   query?: string | null
   date_from?: string | null
@@ -71,6 +96,9 @@ export type Database = {
       streams: { Row: Stream; Insert: Omit<Stream, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Stream> }
       chapters: { Row: Chapter; Insert: Omit<Chapter, 'id' | 'created_at'>; Update: Partial<Chapter> }
       ratings: { Row: Rating; Insert: Omit<Rating, 'id' | 'created_at'>; Update: Partial<Rating> }
+      entities: { Row: Entity; Insert: Omit<Entity, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Entity> }
+      stream_entities: { Row: StreamEntity; Insert: StreamEntity; Update: Partial<StreamEntity> }
+      magazine_entities: { Row: MagazineEntity; Insert: MagazineEntity; Update: Partial<MagazineEntity> }
     }
     Functions: {
       search_streams: {

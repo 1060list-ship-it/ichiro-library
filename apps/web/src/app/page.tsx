@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Stream } from '@/lib/types'
 import StreamCard from '@/components/StreamCard'
@@ -92,6 +93,7 @@ export default function Home() {
   }, [view, debouncedQuery, fuzzy])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStreams()
   }, [fetchStreams])
 
@@ -109,10 +111,10 @@ export default function Home() {
           ichiro library
         </h1>
         <p className="text-xs text-gray-400 mt-0.5">山口一郎 YouTubeライブ アーカイブ</p>
-        <a href="/magazine"
+        <Link href="/magazine"
           className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-indigo-400 hover:text-indigo-300 font-medium">
           マガジン →
-        </a>
+        </Link>
       </header>
 
       {/* カテゴリナビゲーション */}

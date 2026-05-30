@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import type { Stream, Chapter, Highlight } from '@/lib/types'
+import { linkifyEntities } from '@/lib/linkify'
+import type { Stream, Chapter, Highlight, Entity } from '@/lib/types'
 import ChapterList from '@/components/ChapterList'
 
 const REASON_COLORS: Record<string, string> = {
@@ -15,7 +16,7 @@ const REASON_COLORS: Record<string, string> = {
   '神回':  'bg-purple-900 text-purple-300',
 }
 
-function HighlightList({ highlights, videoId }: { highlights: Highlight[]; videoId: string }) {
+function HighlightList({ highlights, videoId, entities }: { highlights: Highlight[]; videoId: string; entities: Entity[] }) {
   return (
     <div className="bg-gray-900 rounded-lg overflow-hidden">
       <p className="text-xs text-gray-500 font-medium px-4 pt-4 pb-2">盛り上がり</p>
@@ -27,14 +28,22 @@ function HighlightList({ highlights, videoId }: { highlights: Highlight[]; video
           const linkSec = Math.max(0, h.start_sec - 30)
           const url = `https://www.youtube.com/watch?v=${videoId}&t=${linkSec}`
           return (
-            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+            <div key={i}
               className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
               <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">{timestamp}</span>
               <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
                 {h.reason}
               </span>
-              <span className="text-sm text-gray-200 leading-snug">「{h.quote}」</span>
-            </a>
+              <span className="text-sm text-gray-200 leading-snug flex-1">「{linkifyEntities(h.quote, entities)}」</span>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0 mt-0.5"
+              >
+                YouTube
+              </a>
+            </div>
           )
         })}
       </div>
@@ -46,6 +55,7 @@ export default function StreamPage() {
   const { id } = useParams<{ id: string }>()
   const [stream, setStream] = useState<Stream | null>(null)
   const [chapters, setChapters] = useState<Chapter[]>([])
+  const [entities, setEntities] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -53,6 +63,21 @@ export default function StreamPage() {
       const { data: s } = await supabase.from('streams').select('*').eq('video_id', id).single() as { data: import('@/lib/types').Stream | null }
       if (s) {
         setStream(s)
+        const { data: entityRows } = await supabase
+          .from('stream_entities')
+          .select('entity_id')
+          .eq('stream_id', s.id)
+
+        if (entityRows?.length) {
+          const entityIds = (entityRows as unknown as { entity_id: string }[]).map((row) => row.entity_id)
+          const { data: entityData } = await supabase
+            .from('entities')
+            .select('*')
+            .in('id', entityIds)
+
+          if (entityData) setEntities(entityData as Entity[])
+        }
+
         const { data: c } = await supabase
           .from('chapters')
           .select('*')
@@ -105,7 +130,7 @@ export default function StreamPage() {
               <span key={c} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{c}</span>
             ))}
             {stream.guests?.map(g => (
-              <span key={g} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{g}</span>
+              <span key={g} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyEntities(g, entities)}</span>
             ))}
             {stream.tags?.map(t => (
               <span key={t} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{t}</span>
@@ -117,13 +142,13 @@ export default function StreamPage() {
         {stream.summary && (
           <div className="bg-gray-900 rounded-lg p-4 space-y-1">
             <p className="text-xs text-gray-500 font-medium">AI要約</p>
-            <p className="text-sm text-gray-200 leading-relaxed">{stream.summary}</p>
+            <p className="text-sm text-gray-200 leading-relaxed">{linkifyEntities(stream.summary, entities)}</p>
           </div>
         )}
 
         {/* 盛り上がり */}
         {stream.highlights && stream.highlights.length > 0 && (
-          <HighlightList highlights={stream.highlights} videoId={stream.video_id} />
+          <HighlightList highlights={stream.highlights} videoId={stream.video_id} entities={entities} />
         )}
 
         {/* チャプター */}
