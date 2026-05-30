@@ -8,3 +8,8 @@ node_modules/
 .next/
 .venv/
 **/.venv/
+
+# 開発時の一時スクリーンショット・解析データ
+docs/*.png
+docs/*.jpg
+docs/*.json
