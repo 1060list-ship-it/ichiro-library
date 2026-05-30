@@ -59,6 +59,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "video_id":      video_meta["video_id"],
         "title":         video_meta["title"],
         "stream_date":   video_meta["stream_date"],
+        "started_at":    video_meta.get("started_at"),
         "duration_min":  video_meta.get("duration_min"),
         "view_count":    video_meta.get("view_count"),
         "like_count":    video_meta.get("like_count"),

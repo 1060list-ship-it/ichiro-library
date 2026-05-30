@@ -6,6 +6,7 @@ magazinesテーブルに保存する。
 
 import os
 import re
+import sys
 import json
 import logging
 import argparse
@@ -210,10 +211,19 @@ def generate_magazine(target_date: date = None):
     if existing.data:
         logger.info(f"[{label}] 既存のマガジンがあります。上書きします")
 
+    # 字幕完備チェック — transcript_failed があれば中断
+    failed_streams = sb.table("streams").select("video_id, title").eq("status", "transcript_failed") \
+        .gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).execute()
+    if failed_streams.data:
+        titles = [f"  - {s['title'][:60]} ({s['video_id']})" for s in failed_streams.data]
+        logger.error(f"[{label}] 字幕未取得の配信があるためマガジン発行を中断:\n" + "\n".join(titles))
+        logger.error(f"[{label}] 該当動画の字幕を取得後、再度実行してください")
+        sys.exit(1)
+
     # 今週の配信を取得
     streams_res = sb.table("streams").select(
-        "id, video_id, title, stream_date, summary, tags, corner_names, guests, songs, highlights, talk_topics"
-    ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("stream_date").execute()
+        "id, video_id, title, stream_date, started_at, summary, tags, corner_names, guests, songs, highlights, talk_topics"
+    ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("started_at", nullsfirst=False).execute()
 
     streams = streams_res.data
     if not streams:
@@ -239,6 +249,7 @@ def generate_magazine(target_date: date = None):
             "video_id": s["video_id"],
             "title": s["title"],
             "date": s["stream_date"],
+            "started_at": s.get("started_at", ""),
             "summary": s["summary"] or "",
             "corner_names": s.get("corner_names") or [],
             "guests": s.get("guests") or [],
@@ -271,18 +282,23 @@ def generate_magazine(target_date: date = None):
     stream_ids = [s["id"] for s in streams]
 
     if existing.data:
+        # 上書き時は号数を変更しない（既存の号数を保持）
         sb.table("magazines").update({
             "content": content,
             "stream_ids": stream_ids,
             "generated_at": "now()",
         }).eq("week_label", label).execute()
     else:
+        # 新規発行時に号数を採番（現在の最大号数 + 1）
+        max_issue = sb.table("magazines").select("issue_number").order("issue_number", desc=True).limit(1).execute()
+        issue_number = (max_issue.data[0]["issue_number"] or 0) + 1 if max_issue.data else 1
         sb.table("magazines").insert({
             "week_label": label,
             "week_start": monday.isoformat(),
             "week_end": sunday.isoformat(),
             "content": content,
             "stream_ids": stream_ids,
+            "issue_number": issue_number,
         }).execute()
 
     logger.info(f"[{label}] magazinesテーブルに保存完了")

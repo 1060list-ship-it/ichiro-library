@@ -9,6 +9,7 @@ type Magazine = {
   week_label: string
   week_start: string
   week_end: string
+  issue_number: number | null
   content: {
     headline: string
     intro: string
@@ -28,7 +29,7 @@ export default function MagazinePage() {
   useEffect(() => {
     supabase
       .from('magazines')
-      .select('id, week_label, week_start, week_end, content, cover_image_url, generated_at')
+      .select('id, week_label, week_start, week_end, issue_number, content, cover_image_url, generated_at')
       .order('week_label', { ascending: false })
       .limit(20)
       .then(({ data }) => {
@@ -69,7 +70,12 @@ export default function MagazinePage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-500 mb-0.5">{start}〜{end}</p>
+                    <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1.5">
+                      {mag.issue_number != null && (
+                        <span className="text-indigo-400 font-mono font-semibold">#{mag.issue_number}</span>
+                      )}
+                      <span>{start}〜{end}</span>
+                    </p>
                     <p className="text-sm font-bold text-white leading-snug line-clamp-1 mb-1">
                       {mag.content.headline}
                     </p>

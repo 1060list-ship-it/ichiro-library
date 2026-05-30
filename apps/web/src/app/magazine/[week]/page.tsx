@@ -42,6 +42,7 @@ type Magazine = {
   week_label: string
   week_start: string
   week_end: string
+  issue_number: number | null
   content: MagazineContent
   cover_image_url: string | null
   stream_ids: string[] | null
@@ -391,6 +392,11 @@ export default function MagazineWeekPage() {
           </div>
 
           <div className="absolute bottom-0 left-0 right-0 p-5">
+            {magazine.issue_number != null && (
+              <p className="text-xs text-indigo-300 font-mono font-semibold tracking-widest mb-1">
+                No.{magazine.issue_number}
+              </p>
+            )}
             <p className="text-xs text-gray-400 mb-1.5">{start} 〜 {end}</p>
             <h1 className="text-xl font-bold leading-snug text-white">{content.headline}</h1>
           </div>

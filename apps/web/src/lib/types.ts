@@ -9,6 +9,7 @@ export type Stream = {
   video_id: string
   title: string
   stream_date: string
+  started_at: string | null
   duration_min: number | null
   view_count: number | null
   view_count_7d: number | null

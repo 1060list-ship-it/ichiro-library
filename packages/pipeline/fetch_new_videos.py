@@ -100,6 +100,7 @@ def _fetch_video_details(youtube, video_ids: list[str]) -> list[dict]:
             "video_id": item["id"],
             "title": snippet.get("title", ""),
             "stream_date": stream_date,
+            "started_at": actual_start,
             "duration_min": duration_min,
             "view_count": int(stats.get("viewCount", 0)) or None,
             "like_count": int(stats.get("likeCount", 0)) or None,
