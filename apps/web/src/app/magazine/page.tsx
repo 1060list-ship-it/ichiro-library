@@ -25,6 +25,7 @@ type Magazine = {
 export default function MagazinePage() {
   const [magazines, setMagazines] = useState<Magazine[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -32,7 +33,8 @@ export default function MagazinePage() {
       .select('id, week_label, week_start, week_end, issue_number, content, cover_image_url, generated_at')
       .order('week_label', { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) setFetchError(error.message)
         if (data) setMagazines(data as Magazine[])
         setLoading(false)
       })
@@ -51,7 +53,12 @@ export default function MagazinePage() {
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-4">
-        {magazines.length === 0 ? (
+        {fetchError && (
+          <div className="mb-4 p-3 bg-red-950 border border-red-800 rounded text-red-300 text-xs font-mono break-all">
+            Supabase error: {fetchError}
+          </div>
+        )}
+        {magazines.length === 0 && !fetchError ? (
           <p className="text-gray-500 text-sm text-center py-12">まだマガジンがありません</p>
         ) : (
           <div className="divide-y divide-gray-800">
