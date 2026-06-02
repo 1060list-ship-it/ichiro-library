@@ -64,7 +64,7 @@ export function useAdminAuth() {
       setAuthenticated(true)
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : '認証に失敗しました。')
+      setError(`[debug] ${String(e)}`)
       return false
     } finally {
       setSubmitting(false)
