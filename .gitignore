@@ -13,3 +13,7 @@ node_modules/
 docs/*.png
 docs/*.jpg
 docs/*.json
+
+# 参照用画像・自動生成一時ファイル
+reference/
+supabase/.temp/

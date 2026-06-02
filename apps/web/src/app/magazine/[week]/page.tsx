@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { getMagazineCoverUrl, hasLocalMagazineCover } from '@/lib/magazineCovers'
 import { supabase } from '@/lib/supabase'
 import { linkifyEntities } from '@/lib/linkify'
 import type { Entity } from '@/lib/types'
@@ -42,7 +43,6 @@ type Magazine = {
   week_label: string
   week_start: string
   week_end: string
-  issue_number: number | null
   content: MagazineContent
   cover_image_url: string | null
   stream_ids: string[] | null
@@ -60,6 +60,21 @@ const REASON_COLORS: Record<string, string> = {
   '感動': 'bg-pink-900/70 text-pink-300',
   '驚き': 'bg-orange-900/70 text-orange-300',
   '神回': 'bg-purple-900/70 text-purple-300',
+}
+
+const LOAD_TIMEOUT_MS = 10000
+
+function withTimeout<T>(promise: PromiseLike<T>, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), LOAD_TIMEOUT_MS)
+    }),
+  ])
+}
+
+function formatMagazineNumber(weekLabel: string) {
+  return weekLabel.replaceAll('-', '')
 }
 
 // -----------------------------------------------------------------------
@@ -211,48 +226,61 @@ function SongsSection({
   streamMap: Record<string, StreamInfo>
   entities: Entity[]
 }) {
+  const [open, setOpen] = useState(false)
+
   return (
     <section>
-      <SectionHeading>今週流れた曲</SectionHeading>
-      <div className="bg-gray-900 rounded-xl overflow-hidden divide-y divide-gray-800/60">
-        {songs.map((s, i) => {
-          const title = typeof s === 'string' ? s : s.title
-          const videoId = typeof s === 'string' ? undefined : s.video_id
-          const streamTitle = videoId ? streamMap[videoId]?.title : undefined
-          const youtubeUrl = videoId
-            ? `https://www.youtube.com/watch?v=${videoId}`
-            : undefined
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="w-full text-left"
+      >
+        <SectionHeading>
+          今週流れた曲（{songs.length}曲） {open ? '▲' : '▼'}
+        </SectionHeading>
+      </button>
+      {open && (
+        <div className="bg-gray-900 rounded-xl overflow-hidden divide-y divide-gray-800/60">
+          {songs.map((s, i) => {
+            const title = typeof s === 'string' ? s : s.title
+            const videoId = typeof s === 'string' ? undefined : s.video_id
+            const streamTitle = videoId ? streamMap[videoId]?.title : undefined
+            const youtubeUrl = videoId
+              ? `https://www.youtube.com/watch?v=${videoId}`
+              : undefined
 
-          const inner = (
-            <div className="flex items-center gap-3 px-4 py-3">
-              {/* 曲番号 */}
-              <span className="text-xs text-gray-600 font-mono w-5 flex-shrink-0 text-right">
-                {i + 1}
-              </span>
-              {/* 曲名 */}
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-sm text-gray-200 leading-snug">{linkifyEntities(title, entities)}</p>
-                {streamTitle && (
-                  <StreamSourceBadge title={streamTitle} />
+            const inner = (
+              <div className="flex items-center gap-3 px-4 py-3">
+                {/* 曲番号 */}
+                <span className="text-xs text-gray-600 font-mono w-5 flex-shrink-0 text-right">
+                  {i + 1}
+                </span>
+                {/* 曲名 */}
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-sm text-gray-200 leading-snug">{linkifyEntities(title, entities)}</p>
+                  {streamTitle && (
+                    <StreamSourceBadge title={streamTitle} />
+                  )}
+                </div>
+                {/* YouTubeリンクアイコン */}
+                {youtubeUrl && (
+                  <a
+                    href={youtubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0"
+                  >
+                    YouTube
+                  </a>
                 )}
               </div>
-              {/* YouTubeリンクアイコン */}
-              {youtubeUrl && (
-                <a
-                  href={youtubeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0"
-                >
-                  YouTube
-                </a>
-              )}
-            </div>
-          )
+            )
 
-          return <div key={i} className="hover:bg-gray-800/50 transition-colors">{inner}</div>
-        })}
-      </div>
+            return <div key={i} className="hover:bg-gray-800/50 transition-colors">{inner}</div>
+          })}
+        </div>
+      )}
     </section>
   )
 }
@@ -267,55 +295,83 @@ export default function MagazineWeekPage() {
   const [streamMap, setStreamMap] = useState<Record<string, StreamInfo>>({})
   const [entities, setEntities] = useState<Entity[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     const load = async () => {
-      const { data } = await supabase
-        .from('magazines')
-        .select('*')
-        .eq('week_label', week)
-        .single()
+      setLoading(true)
+      setError(null)
 
-      if (cancelled) return
-
-      if (data) {
-        const mag = data as Magazine
-        setMagazine(mag)
-
-        const { data: entityRows } = await supabase
-          .from('magazine_entities')
-          .select('entity_id')
-          .eq('magazine_id', mag.id)
-
-        if (!cancelled && entityRows?.length) {
-          const entityIds = (entityRows as unknown as { entity_id: string }[]).map((row) => row.entity_id)
-          const { data: entityData } = await supabase
-            .from('entities')
+      try {
+        const { data, error: queryError } = await withTimeout(
+          supabase
+            .from('magazines')
             .select('*')
-            .in('id', entityIds)
+            .eq('week_label', week)
+            .single(),
+          'マガジンの取得がタイムアウトしました'
+        )
 
-          if (!cancelled && entityData) setEntities(entityData as Entity[])
+        if (cancelled) return
+
+        if (queryError) {
+          setError(queryError.message)
+          return
         }
 
-        // stream_ids から動画情報を取得して video_id ベースのマップを構築
-        if (mag.stream_ids && mag.stream_ids.length > 0) {
-          const { data: streams } = await supabase
-            .from('streams')
-            .select('video_id, title, stream_date')
-            .in('id', mag.stream_ids)
+        if (data) {
+          const mag = data as Magazine
+          setMagazine(mag)
 
-          if (!cancelled && streams) {
-            const map: Record<string, StreamInfo> = {}
-            for (const s of streams as { video_id: string; title: string; stream_date: string }[]) {
-              map[s.video_id] = { title: s.title, stream_date: s.stream_date }
+          const { data: entityRows } = await withTimeout(
+            supabase
+              .from('magazine_entities')
+              .select('entity_id')
+              .eq('magazine_id', mag.id),
+            '関連エンティティの取得がタイムアウトしました'
+          )
+
+          if (!cancelled && entityRows?.length) {
+            const entityIds = (entityRows as unknown as { entity_id: string }[]).map((row) => row.entity_id)
+            const { data: entityData } = await withTimeout(
+              supabase
+                .from('entities')
+                .select('*')
+                .in('id', entityIds),
+              'エンティティ情報の取得がタイムアウトしました'
+            )
+
+            if (!cancelled && entityData) setEntities(entityData as Entity[])
+          }
+
+          // stream_ids から動画情報を取得して video_id ベースのマップを構築
+          if (mag.stream_ids && mag.stream_ids.length > 0) {
+            const { data: streams } = await withTimeout(
+              supabase
+                .from('streams')
+                .select('video_id, title, stream_date')
+                .in('id', mag.stream_ids),
+              '配信情報の取得がタイムアウトしました'
+            )
+
+            if (!cancelled && streams) {
+              const map: Record<string, StreamInfo> = {}
+              for (const s of streams as { video_id: string; title: string; stream_date: string }[]) {
+                map[s.video_id] = { title: s.title, stream_date: s.stream_date }
+              }
+              setStreamMap(map)
             }
-            setStreamMap(map)
           }
         }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'マガジンの取得に失敗しました')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
     }
 
     load()
@@ -334,7 +390,14 @@ export default function MagazineWeekPage() {
   if (!magazine) return (
     <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
       <div className="text-center space-y-3">
-        <p className="text-sm text-gray-400">マガジンが見つかりません</p>
+        {error ? (
+          <>
+            <p className="text-sm text-red-300">マガジンを読み込めませんでした</p>
+            <p className="text-xs text-gray-600 max-w-xs">{error}</p>
+          </>
+        ) : (
+          <p className="text-sm text-gray-400">マガジンが見つかりません</p>
+        )}
         <Link href="/magazine" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
           バックナンバーへ
         </Link>
@@ -349,6 +412,9 @@ export default function MagazineWeekPage() {
   const end = new Date(magazine.week_end).toLocaleDateString('ja-JP', {
     month: 'long', day: 'numeric',
   })
+  const magazineNumber = formatMagazineNumber(magazine.week_label)
+  const coverImageUrl = getMagazineCoverUrl(magazine.week_label, magazine.cover_image_url)
+  const precomposedCover = hasLocalMagazineCover(magazine.week_label)
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -365,41 +431,42 @@ export default function MagazineWeekPage() {
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-10">
 
         {/* カバー画像 */}
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden">
-          {magazine.cover_image_url ? (
+        <div className="relative mx-auto w-full max-w-md aspect-[210/297] rounded-sm overflow-hidden bg-neutral-100 shadow-2xl shadow-black/40 ring-1 ring-white/10">
+          {coverImageUrl ? (
             <img
-              src={magazine.cover_image_url}
+              src={coverImageUrl}
               alt={content.headline}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-gray-900 to-gray-950">
-              <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage:
-                    'radial-gradient(circle at 30% 40%, #6366f1 0%, transparent 60%), radial-gradient(circle at 70% 70%, #0ea5e9 0%, transparent 50%)',
-                }}
-              />
+            <div className="w-full h-full bg-neutral-100 text-gray-950 px-8 py-8 flex flex-col justify-between">
+              <div>
+                <p className="text-5xl font-black tracking-[0.22em] leading-[0.95]">ICHIRO<br />LIBRARY</p>
+                <p className="text-xs font-semibold tracking-[0.35em] mt-4">一郎ライブラリー マガジン</p>
+              </div>
+              <div className="space-y-3">
+                <p className="text-sm font-mono font-bold tracking-[0.24em]">{magazineNumber}</p>
+                <h1 className="text-3xl font-bold leading-tight">{content.headline}</h1>
+              </div>
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/20 to-transparent" />
-
-          <div className="absolute top-3 left-3">
-            <span className="bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-md text-xs text-gray-300 font-medium">
-              いっくん追いかけマガジン
-            </span>
-          </div>
-
-          <div className="absolute bottom-0 left-0 right-0 p-5">
-            {magazine.issue_number != null && (
-              <p className="text-xs text-indigo-300 font-mono font-semibold tracking-widest mb-1">
-                No.{magazine.issue_number}
+          {!precomposedCover && (
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-5">
+              <p className="text-xs text-gray-300 font-mono font-semibold tracking-widest mb-1">
+                {magazineNumber}
               </p>
-            )}
-            <p className="text-xs text-gray-400 mb-1.5">{start} 〜 {end}</p>
-            <h1 className="text-xl font-bold leading-snug text-white">{content.headline}</h1>
-          </div>
+              <p className="text-xs text-gray-300 mb-1.5">{start} 〜 {end}</p>
+              <h1 className="text-xl font-bold leading-snug text-white">{content.headline}</h1>
+            </div>
+          )}
+
+          {!precomposedCover && (
+            <div className="absolute top-3 left-3">
+              <span className="bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-md text-xs text-gray-300 font-medium">
+                いっくん追いかけマガジン
+              </span>
+            </div>
+          )}
         </div>
 
         {/* イントロ */}

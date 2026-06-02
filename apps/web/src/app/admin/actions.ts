@@ -71,6 +71,7 @@ export type EnqueueJobInput =
   | { kind: 'fetch_new'; days?: number; maxVideos?: number }
   | { kind: 'reprocess' }
   | { kind: 'reprocess_single'; videoId: string }
+  | { kind: 'weekly_magazine'; date?: string }
 
 export type PipelineJob = {
   id: string
@@ -301,12 +302,17 @@ export async function fetchAdminStreamsPage(offset = 0, limit = 20): Promise<Adm
 export async function enqueueJob(input: EnqueueJobInput): Promise<PipelineJob> {
   await requireAdminSession()
 
+  let payload: Record<string, unknown> | null = null
+  if (input.kind === 'fetch_new') {
+    payload = { days: input.days ?? 30, max_videos: input.maxVideos ?? 20 }
+  } else if (input.kind === 'weekly_magazine' && input.date) {
+    payload = { date: input.date }
+  }
+
   const row = {
     kind: input.kind,
     video_id: input.kind === 'reprocess_single' ? input.videoId : null,
-    payload: input.kind === 'fetch_new'
-      ? { days: input.days ?? 30, max_videos: input.maxVideos ?? 20 }
-      : null,
+    payload,
   }
 
   const { data, error } = await (supabaseAdmin as never as {

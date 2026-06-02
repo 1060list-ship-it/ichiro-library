@@ -20,6 +20,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 from batch_runner import run_batch
 from reprocess_videos import run as run_reprocess
 from store import get_supabase_client
+from weekly_magazine import generate_magazine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -116,6 +117,16 @@ def run_job(job: Dict[str, Any], dry_run: bool = False):
         if not video_id:
             raise ValueError("reprocess_single requires video_id")
         run_reprocess(dry_run=dry_run, target_video_id=video_id)
+        return
+
+    if kind == "weekly_magazine":
+        from datetime import date as _date
+        target_str = payload.get("date")
+        target = _date.fromisoformat(target_str) if target_str else None
+        if dry_run:
+            logger.info("dry-run: weekly_magazine generation skipped")
+            return
+        generate_magazine(target_date=target)
         return
 
     raise ValueError("Unknown job kind: %s" % kind)

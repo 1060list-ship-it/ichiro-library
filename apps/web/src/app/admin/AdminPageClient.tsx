@@ -46,6 +46,7 @@ function formatJobKind(kind: string) {
   if (kind === 'fetch_new') return '新規取り込み'
   if (kind === 'reprocess') return '一括再処理'
   if (kind === 'reprocess_single') return '単体再処理'
+  if (kind === 'weekly_magazine') return 'マガジン生成'
   return kind
 }
 
@@ -483,6 +484,14 @@ export default function AdminPageClient() {
                     className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
                   >
                     {jobSubmittingKind === 'reprocess' ? '登録中...' : 'transcript_failed を一括再処理'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={jobSubmittingKind !== null}
+                    onClick={() => void handleEnqueueJob({ kind: 'weekly_magazine' })}
+                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                  >
+                    {jobSubmittingKind === 'weekly_magazine' ? '生成キューに登録中...' : '今週のマガジンを生成'}
                   </button>
                   <button
                     type="button"

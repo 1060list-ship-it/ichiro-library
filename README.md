@@ -103,6 +103,21 @@ python worker.py --dry-run
 */15 * * * * cd /path/to/ichiro-library/packages/pipeline && python worker.py >> /tmp/ichiro-worker.log 2>&1
 ```
 
+### 日曜深夜のマガジン自動生成
+
+毎週日曜 23:30 に `weekly_magazine` ジョブをキューに投入し、worker.py が処理する。
+
+```bash
+# crontab -e で以下を追加
+
+# 毎週日曜 23:30 にマガジン生成ジョブをキューに登録
+30 23 * * 0 cd /path/to/ichiro-library/packages/pipeline && python -c "from store import get_supabase_client; client = get_supabase_client(); client.table('pipeline_jobs').insert({'kind': 'weekly_magazine'}).execute(); print('weekly_magazine job enqueued')" >> /tmp/ichiro-enqueue.log 2>&1
+
+# worker.py はすでに */15 で動いているので自動的に処理される
+```
+
+または管理画面の「今週のマガジンを生成」ボタンから手動実行も可能。
+
 ## 開発フェーズ
 
 | Phase | 内容 | 状態 |
