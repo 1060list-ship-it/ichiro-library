@@ -102,7 +102,7 @@ def _try_youtube_transcript_api(video_id: str) -> Optional[TranscriptResult]:
 
 
 def _try_supadata(video_id: str) -> Optional[TranscriptResult]:
-    api_key = os.getenv("SUPADATA_API_KEY")
+    api_key = (os.getenv("SUPADATA_API_KEY") or "").strip()
     if not api_key:
         logger.info(f"[{video_id}] SUPADATA_API_KEY 未設定、スキップ")
         return None
