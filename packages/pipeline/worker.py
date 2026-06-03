@@ -175,6 +175,22 @@ def write_status_file(client) -> None:
         )
         failed = failed_resp.data or []
 
+        mag_resp = (
+            client.table("magazines")
+            .select("week_label,created_at")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        latest_mag = mag_resp.data[0] if mag_resp.data else None
+
+        # 次回発行予定週（金曜実行 → 昨日=木曜の週 = %W ベース）
+        from datetime import date as _date
+        next_friday = _date.today() + timedelta(days=(4 - _date.today().weekday()) % 7 or 7)
+        next_target = next_friday - timedelta(days=1)
+        next_monday = next_target - timedelta(days=next_target.weekday())
+        next_week_label = next_monday.strftime("%Y-W%W")
+
         lines = [
             f"# ichiro-library ステータス\n",
             f"\n更新: {now.strftime('%Y-%m-%d %H:%M')} UTC\n\n",
@@ -182,6 +198,9 @@ def write_status_file(client) -> None:
         ]
         if latest:
             lines.append(f"- 最終取り込み: {latest['stream_date']} 「{latest['title'][:30]}…」 ({latest['status']})\n")
+        if latest_mag:
+            lines.append(f"- 最新マガジン: {latest_mag['week_label']}（発行済み）\n")
+            lines.append(f"- 次回マガジン: {next_week_label}（毎週金曜 07:00 JST 自動発行）\n")
 
         if failed:
             lines.append(f"\n## 要対応: transcript_failed（直近7日）\n\n")
