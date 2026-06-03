@@ -2,9 +2,8 @@ name: Weekly Magazine Generation
 
 on:
   schedule:
-    # 毎週月曜 07:00 JST (日曜 22:00 UTC) に実行
-    # 日曜の配信まで含めた週をカバーするため月曜朝に生成
-    - cron: '0 22 * * 0'
+    # 毎週金曜 07:00 JST (木曜 22:00 UTC) に実行
+    - cron: '0 22 * * 4'
   workflow_dispatch:
     inputs:
       date:
