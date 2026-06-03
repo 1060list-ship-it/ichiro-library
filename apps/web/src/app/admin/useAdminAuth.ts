@@ -63,8 +63,8 @@ export function useAdminAuth() {
       window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, 'true')
       setAuthenticated(true)
       return true
-    } catch (e) {
-      setError(`[debug] ${String(e)}`)
+    } catch {
+      setError('認証に失敗しました。')
       return false
     } finally {
       setSubmitting(false)
