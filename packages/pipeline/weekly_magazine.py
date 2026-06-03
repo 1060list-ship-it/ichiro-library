@@ -216,10 +216,11 @@ def generate_magazine(target_date: date = None):
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     sb = create_client(url, key)
 
-    # 既存チェック
+    # 既存チェック — 再生成が必要な場合は workflow_dispatch で手動実行
     existing = sb.table("magazines").select("id").eq("week_label", label).execute()
     if existing.data:
-        logger.info(f"[{label}] 既存のマガジンがあります。上書きします")
+        logger.info(f"[{label}] 既存のマガジンがあります。スキップします（再生成は workflow_dispatch で）")
+        return
 
     # 字幕完備チェック — transcript_failed があれば中断
     failed_streams = sb.table("streams").select("video_id, title").eq("status", "transcript_failed") \
