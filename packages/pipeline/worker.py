@@ -120,6 +120,13 @@ def run_job(job: Dict[str, Any], dry_run: bool = False):
         run_reprocess(dry_run=dry_run, target_video_id=video_id)
         return
 
+    if kind == "whisper_transcribe":
+        from whisper_transcribe import transcribe_and_store
+        if not video_id:
+            raise ValueError("whisper_transcribe requires video_id")
+        transcribe_and_store(client, video_id, dry_run=dry_run)
+        return
+
     if kind == "weekly_magazine":
         from datetime import date as _date
         target_str = payload.get("date")

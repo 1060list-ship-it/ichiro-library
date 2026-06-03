@@ -28,7 +28,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 from fetch_new_videos import get_youtube_client, get_channel_id, fetch_live_archives, filter_new_videos, _fetch_video_details
 from get_transcript import get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
-from store import get_supabase_client, get_existing_video_ids, upsert_stream, insert_chapters, update_view_count_7d
+from store import get_supabase_client, get_existing_video_ids, upsert_stream, insert_chapters, update_view_count_7d, get_transcript_retry_count, queue_pipeline_job
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +75,16 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
         insert_chapters(supabase_client, stream_id, ai_result["chapters"])
 
     logger.info(f"=== 処理完了: {video_id} ===")
+
+    if transcript_result.source == "failed" and not dry_run:
+        retry_count = get_transcript_retry_count(supabase_client, video_id)
+        if retry_count < 2:
+            queue_pipeline_job(supabase_client, "reprocess_single", video_id)
+            logger.info(f"[{video_id}] 字幕取得失敗 → reprocess_single をキュー（通算{retry_count + 1}回目）")
+        else:
+            queue_pipeline_job(supabase_client, "whisper_transcribe", video_id)
+            logger.warning(f"[{video_id}] 字幕取得 {retry_count}回失敗 → whisper_transcribe にエスカレーション")
+
     return transcript_result.source != "failed"
 
 

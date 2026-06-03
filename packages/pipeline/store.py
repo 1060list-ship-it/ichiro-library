@@ -135,3 +135,37 @@ def update_view_count_7d(client: Client, video_meta: dict):
         {"view_count_7d": video_meta.get("view_count")}
     ).eq("video_id", video_meta["video_id"]).execute()
     logger.info(f"[{video_meta['video_id']}] view_count_7d 更新: {video_meta.get('view_count')}")
+
+
+def get_transcript_retry_count(client: Client, video_id: str) -> int:
+    """pipeline_jobs に積まれた reprocess_single の件数でリトライ回数を返す"""
+    resp = (
+        client.table("pipeline_jobs")
+        .select("id")
+        .eq("video_id", video_id)
+        .eq("kind", "reprocess_single")
+        .execute()
+    )
+    return len(resp.data or [])
+
+
+def queue_pipeline_job(client: Client, kind: str, video_id: str, payload: Optional[dict] = None) -> None:
+    from datetime import datetime, timezone
+    client.table("pipeline_jobs").insert({
+        "kind": kind,
+        "video_id": video_id,
+        "status": "pending",
+        "payload": payload or {},
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    logger.info(f"[{video_id}] pipeline_jobs に追加: kind={kind}")
+
+
+def update_transcript(client: Client, video_id: str, transcript_text: str, source: str) -> None:
+    """Whisper 文字起こし後に transcript と status のみ更新する"""
+    client.table("streams").update({
+        "transcript": transcript_text,
+        "status": "public",
+        "transcript_source_override": source,
+    }).eq("video_id", video_id).execute()
+    logger.info(f"[{video_id}] transcript 更新完了: source={source}")
