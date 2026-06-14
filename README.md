@@ -66,12 +66,25 @@ SELECT title, avg_rating, rating_count FROM streams ORDER BY avg_rating DESC;
 ichiro-library/
 ├── .env.local.example          # 環境変数テンプレート
 ├── supabase/
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql  # DBスキーマ（テーブル・インデックス・RLS・RPC）
-│   └── seed.sql                    # テストデータ
+│   └── migrations/             # DBスキーマ（001〜011）
 ├── packages/
-│   └── pipeline/               # データ収集パイプライン（Phase 2 で実装）
-└── src/                        # Next.js フロントエンド（Phase 3 で実装）
+│   └── pipeline/               # データ収集パイプライン（Python）
+│       ├── batch_runner.py     # 一括取り込み
+│       ├── worker.py           # ジョブキュー処理（15分cron）
+│       ├── weekly_magazine.py  # 週刊マガジン生成（Gemini）
+│       ├── fetch_media_news.py # 外部メディア情報取得（Google News / setlist.fm）
+│       ├── extract_entities.py # エンティティ抽出
+│       ├── get_transcript.py   # YouTube字幕取得（Whisperフォールバックあり）
+│       └── summarize.py        # Gemini要約
+├── apps/
+│   └── web/                    # Next.js フロントエンド（Vercel稼働中）
+│       └── src/app/
+│           ├── page.tsx        # 検索トップ
+│           ├── admin/          # 管理画面（認証あり）
+│           └── magazine/       # 週刊マガジン
+└── .github/workflows/
+    ├── ingest.yml              # 毎日 06:00 JST 自動取り込み
+    └── magazine.yml            # 毎週金曜 07:00 JST マガジン自動生成
 ```
 
 ## Phase 4: パイプラインジョブ運用
@@ -123,10 +136,9 @@ python worker.py --dry-run
 | Phase | 内容 | 状態 |
 |-------|------|------|
 | **1** | Supabase DBスキーマ構築 | ✅ 完了 |
-| **2** | 字幕取得 + Gemini 要約パイプライン（Python） | 未着手 |
-| **3** | 検索UI（Next.js） | 未着手 |
-| **4** | 管理画面 | 未着手 |
-| **5** | 星評価 + ランキング | 未着手 |
-| **6** | 自動巡回バッチ | 未着手 |
-| **7** | Vercel デプロイ | 未着手 |
-| **8** | 実データ運用テスト | 未着手 |
+| **2** | 字幕取得 + Gemini 要約パイプライン（Python） | ✅ 完了 |
+| **3** | 検索UI（Next.js） | ✅ 完了 |
+| **4** | 管理画面 + ジョブキュー + 管理UIトリガー | ✅ 完了 |
+| **4.5** | 週刊マガジン（外部メディア統合・エンティティページ） | ✅ 完了 |
+| **5** | Vercel デプロイ | ✅ 完了（本番稼働中） |
+| **6** | 自動巡回バッチ（GitHub Actions） | ✅ 完了 |
