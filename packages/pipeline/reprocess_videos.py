@@ -62,7 +62,7 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
         "talk_topics":    ai_result.get("talk_topics", []),
         "has_live_singing": ai_result.get("has_live_singing", False),
         "highlights":     ai_result.get("highlights", []),
-        "ai_prompt_ver":  "v2",
+        "ai_prompt_ver":  "v3",
     }).eq("video_id", video_id).execute()
 
     chapters = ai_result.get("chapters", [])

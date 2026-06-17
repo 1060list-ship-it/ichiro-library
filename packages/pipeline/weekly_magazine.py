@@ -277,13 +277,17 @@ def _make_cover(
     base = Image.alpha_composite(base, top_gradient)
 
     # ── 3.6. 底部グラデーション（AI生成テキストをマスク） ──────────────────────
-    # 見出しテキスト描画エリア（下部約22%）を半透明グラデで覆い、
-    # gpt-image-2 が生成した日本語テキスト等を視覚的に隠す
-    grad_top = int(OUT_H * 0.78)
+    # 下15%は完全不透明（見出し描画エリアをAI生成テキストから守る）
+    # 68%〜85%はグラデーション遷移
+    grad_fade_top = int(OUT_H * 0.68)
+    solid_top = int(OUT_H * 0.85)
     bottom_gradient = Image.new("RGBA", (OUT_W, OUT_H), (0, 0, 0, 0))
     grad_draw = ImageDraw.Draw(bottom_gradient)
-    for y in range(grad_top, OUT_H):
-        alpha = int(200 * (y - grad_top) / (OUT_H - grad_top))
+    for y in range(grad_fade_top, OUT_H):
+        if y >= solid_top:
+            alpha = 255
+        else:
+            alpha = int(255 * (y - grad_fade_top) / (solid_top - grad_fade_top))
         grad_draw.line([(0, y), (OUT_W, y)], fill=(*gc, alpha))
     base = Image.alpha_composite(base, bottom_gradient)
 
@@ -432,7 +436,7 @@ def generate_cover_image(
         return None
 
 
-def generate_magazine(target_date: date = None):
+def generate_magazine(target_date: date = None, force: bool = False):
     if target_date is None:
         target_date = date.today() - timedelta(days=1)
 
@@ -443,10 +447,10 @@ def generate_magazine(target_date: date = None):
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     sb = create_client(url, key)
 
-    # 既存チェック — 再生成が必要な場合は workflow_dispatch で手動実行
+    # 既存チェック — force フラグがなければスキップ
     existing = sb.table("magazines").select("id").eq("week_label", label).execute()
-    if existing.data:
-        logger.info(f"[{label}] 既存のマガジンがあります。スキップします（再生成は workflow_dispatch で）")
+    if existing.data and not force:
+        logger.info(f"[{label}] 既存のマガジンがあります。スキップします（再生成は --force で）")
         return
 
     # 字幕完備チェック — transcript_failed があれば中断
@@ -565,7 +569,10 @@ def generate_magazine(target_date: date = None):
     except Exception as e:
         logger.warning(f"[{label}] magazine_entities 保存をスキップ: {e}")
 
-    generate_cover_image(client, content, label, sb, monday, sunday)
+    if not force:
+        generate_cover_image(client, content, label, sb, monday, sunday)
+    else:
+        logger.info(f"[{label}] --force 実行のためカバー画像生成をスキップ")
 
     return content
 
@@ -574,6 +581,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", help="処理対象の日付 YYYY-MM-DD（デフォルト: 昨日）")
     parser.add_argument("--weeks-ago", type=int, default=0, help="何週前を処理するか")
+    parser.add_argument("--force", action="store_true", help="既存マガジンのテキストを上書き再生成（カバー画像はスキップ）")
     args = parser.parse_args()
 
     if args.date:
@@ -581,4 +589,4 @@ if __name__ == "__main__":
     else:
         target = date.today() - timedelta(days=1 + args.weeks_ago * 7)
 
-    generate_magazine(target)
+    generate_magazine(target, force=args.force)

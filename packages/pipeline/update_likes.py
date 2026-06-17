@@ -38,12 +38,16 @@ def run(dry_run: bool = False):
         chunk = video_ids[i:i+50]
         details = _fetch_video_details(youtube, chunk)
         for meta in details:
+            view_count = meta.get("view_count")
             like_count = meta.get("like_count")
-            logger.info(f"[{meta['video_id']}] like_count={like_count}")
-            if not dry_run and like_count is not None:
-                supabase.table("streams").update(
-                    {"like_count": like_count}
-                ).eq("video_id", meta["video_id"]).execute()
+            comment_count = meta.get("comment_count")
+            logger.info(f"[{meta['video_id']}] view={view_count} like={like_count} comment={comment_count}")
+            if not dry_run:
+                supabase.table("streams").update({
+                    "view_count": view_count,
+                    "like_count": like_count,
+                    "comment_count": comment_count,
+                }).eq("video_id", meta["video_id"]).execute()
 
     logger.info("完了")
 
