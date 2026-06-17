@@ -8,15 +8,19 @@ import os
 import re
 import sys
 import json
+import base64
 import logging
 import argparse
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
+from io import BytesIO
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env.local")
 
+from PIL import Image, ImageDraw, ImageFont
+from openai import OpenAI
 from supabase import create_client
 from google import genai
 from google.genai import types
@@ -24,26 +28,29 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from extract_entities import find_entity_ids, load_entities, magazine_text, save_magazine_entities
 from fetch_media_news import fetch_media_news
+from font_utils import get_font_path, get_zen_kaku_bold_path, get_zen_antique_path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("weekly_magazine")
 
 MODEL_NAME = "gemini-2.5-flash"
-IMAGE_MODEL = "imagen-4.0-fast-generate-001"
+IMAGE_MODEL = "gpt-image-2"
+IMAGE_SIZE  = "1024x1536"
 STORAGE_BUCKET = "magazine-covers"
 
-COVER_PROMPT_TEMPLATE = """You are an art director for a Japanese weekly music magazine called "いっくん追いかけマガジン".
-Generate an image generation prompt (in English, max 80 words) for this week's cover illustration.
+COVER_PROMPT_TEMPLATE = """You are an art director for a Japanese weekly music editorial platform called "いっくん追いかけマガジン".
+Generate a weekly vertical editorial image for a UI hero slot; all typography will be composited externally after generation.
 
-FIXED STYLE (always include these):
-- vertical Japanese fashion/culture magazine cover artwork, composed for A4 portrait ratio (210:297) with generous safe margins
+Output ONLY the English image prompt text (max 80 words). No explanations, no labels, no code blocks, no Japanese.
+
+FIXED STYLE (always include ALL of these in your output prompt):
+- vertical Japanese editorial artwork, 2:3 portrait format, pure visual illustration — no masthead space, no headline area, no text zones
 - two-tone or near-monochrome graphic style: black ink, charcoal, warm white paper, one muted cool gray/blue accent only
-- premium Japanese music/culture magazine mood: quiet, intellectual, urban, art-book quality, not a YouTube thumbnail
-- cover concept must come from this week's actual topics, mood, songs, and motifs; avoid a generic portrait template
-- do not make a realistic face or likeness; if a person appears, use a mature 45-year-old presence only as a back-view silhouette, side-profile shadow, hand, glasses, microphone, or coat
-- the human presence must feel middle-aged, grounded, and slightly tired: heavy black coat, lowered shoulders, calm adult stillness; never youthful, idol-like, or boyish
-- NO text, NO legible characters, NO logos; typography will be added separately in the app UI
-- avoid saturated colors, crowded layouts, direct photo likeness, young faces, clean idol styling, and repetitive bust portraits
+- quiet, intellectual, urban, art-book quality — not a flyer, not a YouTube thumbnail, not a product photo
+- cover concept must come from this week's actual topics, mood, songs, and motifs
+- do not make a realistic face or likeness; if a person appears, use a mature 45-year-old presence only as back-view silhouette, side-profile shadow, hand, glasses, microphone, or coat
+- the human presence must feel middle-aged, grounded, slightly tired: heavy black coat, lowered shoulders, calm adult stillness; never youthful or idol-like
+- avoid saturated colors, crowded layouts, direct photo likeness, young faces
 
 THIS WEEK'S CONTENT:
 - Headline: {headline}
@@ -52,7 +59,7 @@ THIS WEEK'S CONTENT:
 - Mood distribution: {mood}
 - Key motifs to consider: water, fish, night cityscape, music, microphone, guitar
 
-Generate the image prompt now. Output the prompt only, nothing else."""
+Output the prompt now."""
 
 MAGAZINE_PROMPT = """あなたは「いっくん追いかけマガジン」の編集者です。
 山口一郎（サカナクション）のYouTubeライブ配信を追えないファンのために、1週間分の配信内容をマガジン形式でまとめてください。
@@ -147,12 +154,200 @@ def _mood_from_highlights(highlights: list) -> str:
     return mapping.get(most_common, "balanced")
 
 
-def generate_cover_image(client, content: dict, label: str, sb) -> Optional[str]:
+def _sanitize_cover_prompt(raw: str, label: str) -> str:
+    """Gemini出力を正規化し gpt-image-2 用プロンプトに変換する。"""
+    import re
+
+    # 1. fenced code block があれば中身を抽出（ブロックごと削除しない）
+    m = re.search(r"```[a-z]*\n?(.*?)```", raw, flags=re.DOTALL)
+    if m:
+        raw = m.group(1)
+
+    # 2. 先頭の前置き行を除去（本文が同一行に続く場合は行ごと削除しない）
+    #    "Prompt: " のように前置きが本文と同行なら前置き部分のみ除去
+    raw = re.sub(
+        r"^[\s>]*(?:here(?:'s| is)(?: the)?(?:\s+(?:image\s+)?(?:generation\s+)?prompt)?|"
+        r"prompt|image prompt|cover prompt|english prompt|生成プロンプト|画像生成プロンプト|"
+        r"プロンプト|以下です?|こちらです?|以下の通りです?)\s*[:\-：]\s*",
+        "", raw, flags=re.IGNORECASE,
+    ).strip()
+
+    # 3. 先頭の箇条書き・番号を除去
+    raw = re.sub(
+        r"^[\s>]*(?:\d+[\.\)、）]|[①-⑨]|[・\-\*\•\–\—]\s*)",
+        "", raw.strip(),
+    ).strip()
+
+    # 4. 外側の引用符を除去（curly quotes含む）
+    raw = raw.strip('"\'「」『』`“”‘’')
+
+    # 5. CJK文字を除去（警告込み）
+    if re.search(r"[　-鿿＀-￯]", raw):
+        logger.warning(f"[{label}] プロンプトに日本語/CJK文字を検出 — 除去します")
+        raw = re.sub(r"[　-鿿＀-￯]+\s*", "", raw).strip()
+
+    # 6. 空チェック
+    if not raw:
+        raise ValueError(f"[{label}] Gemini のプロンプト出力がサニタイズ後に空になりました")
+
+    # 7. 誘発語を置換（"magazine cover" 系・"masthead" 系）
+    TRIGGER_SUBS = [
+        (r"(?i)\bmagazine(?:\s+cover)?\b", "editorial"),
+        (r"(?i)\bcover\s+art(?:work)?\b", "editorial artwork"),
+        (r"(?i)\bcover\s+illustration\b", "editorial illustration"),
+        (r"(?i)\bfront\s+cover\b", "editorial artwork"),
+        (r"(?i)\bcover\s+(?:design|layout|image)\b", "editorial artwork"),
+        (r"(?i)\bmasthead(?:\s+\w+)?\b", ""),
+        (r"(?i)\bheadline[\s\-](?:area|zone|space)\b", ""),
+        (r"(?i)\btitle[\s\-]safe\b", ""),
+        (r"(?i)\bmagazine[\s\-]style\b", "editorial"),
+    ]
+    for pattern, repl in TRIGGER_SUBS:
+        raw = re.sub(pattern, repl, raw)
+    raw = re.sub(r"  +", " ", raw).strip()
+
+    # 8. 禁止句を末尾に付加（既に "no text" が含まれる場合はスキップ）
+    NO_TEXT = (
+        "No text, letters, words, numbers, kanji, kana, roman characters, "
+        "pseudo-writing, glyphs, labels, captions, logos, watermarks, "
+        "street signs, storefront signs, neon signs, or billboards anywhere."
+    )
+    if "no text" not in raw.lower():
+        raw = raw.rstrip("., ") + ". " + NO_TEXT
+
+    # 9. 長さ制限（800 chars）— 文境界で切り詰め
+    MAX = 800
+    if len(raw) > MAX:
+        cutoff = MAX - len(". " + NO_TEXT)
+        last_dot = raw[:cutoff].rfind(". ")
+        trim_at = (last_dot + 2) if last_dot > 0 else cutoff
+        raw = raw[:trim_at].rstrip() + " " + NO_TEXT
+        logger.warning(f"[{label}] プロンプトを {MAX} chars に切り詰めました ({len(raw)} chars)")
+
+    logger.info(f"[{label}] sanitized prompt ({len(raw)} chars): {raw[:100]}...")
+    return raw
+
+
+def _make_cover(
+    image_bytes: bytes,
+    issue_number: str,
+    date_range: str,
+    headline: str,
+) -> bytes:
+    """
+    静的 PNG オーバーレイ（ICHIRO LIBRARY ロゴ）＋ Pillow 可変テキスト合成。
+    AI 画像の輝度を判定し、黒または白テキストを自動選択する。
+    """
+    TEMPLATE_W, TEMPLATE_H = 1086, 1448
+    OUT_W, OUT_H = 1024, 1536
+
+    # スケール係数（テンプレート座標 → 出力画像座標）
+    sx = OUT_W / TEMPLATE_W  # ≈ 0.943
+    sy = OUT_H / TEMPLATE_H  # ≈ 1.061
+
+    # ── 1. AI 生成画像を読み込み、出力サイズにリサイズ ─────────────────────
+    base = Image.open(BytesIO(image_bytes)).convert("RGBA")
+    base = base.resize((OUT_W, OUT_H), Image.LANCZOS)
+
+    # ── 2. 輝度判定（上部 40% の平均輝度） ─────────────────────────────────
+    top_region = base.crop((0, 0, OUT_W, int(OUT_H * 0.4)))
+    gray = top_region.convert("L")
+    pixels = list(gray.getdata())
+    brightness = sum(pixels) / len(pixels)
+    use_white = brightness < 128
+
+    # ── 3. 静的オーバーレイ PNG の選択・合成 ────────────────────────────────
+    ref_dir = Path(__file__).parent.parent.parent / "reference"
+    overlay_name = "magazine_TEX_tmpW.png" if use_white else "ichiro-library-text.png"
+    overlay = Image.open(ref_dir / overlay_name).convert("RGBA")
+    overlay = overlay.resize((OUT_W, OUT_H), Image.LANCZOS)
+    base = Image.alpha_composite(base, overlay)
+
+    draw = ImageDraw.Draw(base)
+    text_color = (255, 255, 255, 255) if use_white else (0, 0, 0, 255)
+
+    # ── 4. フォント読み込み ──────────────────────────────────────────────────
+    zen_kaku_path = str(get_zen_kaku_bold_path())
+    zen_antique_path = str(get_zen_antique_path())
+
+    # w番号フォントサイズ: テンプレートのバウンディングボックス高さ 64px × sy
+    f_issue = ImageFont.truetype(zen_kaku_path, int(52 * sy))
+    # 日付フォントサイズ: テンプレートのバウンディングボックス高さ 64px だが文字が小さい
+    f_date = ImageFont.truetype(zen_kaku_path, int(28 * sy))
+    # 見出しフォントサイズ: テンプレートのバウンディングボックス高さ 80px × sy
+    f_headline = ImageFont.truetype(zen_antique_path, int(65 * sy))
+
+    # ── 5. w番号（右寄せ、右端 x≈977） ─────────────────────────────────────
+    right_x = int(1036 * sx)  # テンプレート右端 x=1036 をスケール
+    top_y_issue = int(72 * sy)  # テンプレート y=72 をスケール
+
+    issue_bbox = draw.textbbox((0, 0), issue_number, font=f_issue)
+    issue_w = issue_bbox[2] - issue_bbox[0]
+    draw.text(
+        (right_x - issue_w, top_y_issue - issue_bbox[1]),
+        issue_number,
+        font=f_issue,
+        fill=text_color,
+    )
+
+    # ── 6. 日付（右寄せ、w番号の下） ────────────────────────────────────────
+    top_y_date = int(140 * sy)  # テンプレート y=140 をスケール
+
+    date_bbox = draw.textbbox((0, 0), date_range, font=f_date)
+    date_w = date_bbox[2] - date_bbox[0]
+    draw.text(
+        (right_x - date_w, top_y_date - date_bbox[1]),
+        date_range,
+        font=f_date,
+        fill=text_color,
+    )
+
+    # ── 7. 見出し（左寄せ、折り返しあり） ──────────────────────────────────
+    left_x = int(68 * sx)  # テンプレート x=68 をスケール
+    top_y_headline = int(1296 * sy)  # テンプレート y=1296 をスケール
+    max_text_w = int(350 * sx)  # テンプレート幅 350px をスケール（折り返し上限）
+
+    def wrap_chars(text: str, font: ImageFont.FreeTypeFont) -> list[str]:
+        lines, cur = [], ""
+        for c in text:
+            test = cur + c
+            if draw.textlength(test, font=font) <= max_text_w:
+                cur = test
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = c
+        if cur:
+            lines.append(cur)
+        return lines
+
+    hl_lines = wrap_chars(headline, f_headline)
+    line_gap = int(f_headline.size * 0.25)
+    hl_h = f_headline.size + line_gap
+
+    for i, line in enumerate(hl_lines):
+        draw.text(
+            (left_x, top_y_headline + i * hl_h),
+            line,
+            font=f_headline,
+            fill=text_color,
+        )
+
+    # ── 8. 出力 ─────────────────────────────────────────────────────────────
+    out = base.convert("RGB")
+    buf = BytesIO()
+    out.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def generate_cover_image(
+    client, content: dict, label: str, sb,
+    monday: date, sunday: date,
+) -> Optional[str]:
     try:
         all_highlights = content.get("highlights", [])
         mood = _mood_from_highlights(all_highlights)
         topics = ", ".join(t["title"] for t in content.get("topics", []))
-        # songs は新形式 [{"title": ..., "video_id": ...}] / 旧形式 ["曲名"] の両対応
         songs_raw = content.get("songs", [])[:5]
         songs = ", ".join(
             (s.get("title", "") if isinstance(s, dict) else str(s))
@@ -168,20 +363,28 @@ def generate_cover_image(client, content: dict, label: str, sb) -> Optional[str]
 
         logger.info(f"[{label}] カバープロンプト生成中...")
         prompt_response = _generate(client, cover_prompt_request)
-        image_prompt = prompt_response.strip()
+        logger.info(f"[{label}] Gemini raw prompt: {prompt_response.strip()[:100]}...")
+        image_prompt = _sanitize_cover_prompt(prompt_response, label)
         logger.info(f"[{label}] 画像プロンプト: {image_prompt[:80]}...")
 
-        logger.info(f"[{label}] カバー画像生成中 (Imagen 4)...")
-        image_response = client.models.generate_images(
+        logger.info(f"[{label}] カバー画像生成中 (gpt-image-2)...")
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_key:
+            raise RuntimeError("OPENAI_API_KEY が未設定")
+        openai_client = OpenAI(api_key=openai_key)
+        image_response = openai_client.images.generate(
             model=IMAGE_MODEL,
             prompt=image_prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                # Imagen uses supported ratios; the web cover frame and final assets normalize to A4.
-                aspect_ratio="3:4",
-            )
+            size=IMAGE_SIZE,
+            quality="high",
+            n=1,
         )
-        image_bytes = image_response.generated_images[0].image.image_bytes
+        image_bytes = base64.b64decode(image_response.data[0].b64_json)
+
+        date_range = f"{monday.strftime('%Y/%m/%d')} – {sunday.strftime('%m/%d')}"
+        week_num = int(monday.strftime("%W"))
+        issue_display = f"w{week_num}"
+        image_bytes = _make_cover(image_bytes, issue_display, date_range, content.get("headline", ""))
 
         file_path = f"{label}.png"
         sb.storage.from_(STORAGE_BUCKET).upload(
@@ -338,7 +541,7 @@ def generate_magazine(target_date: date = None):
     except Exception as e:
         logger.warning(f"[{label}] magazine_entities 保存をスキップ: {e}")
 
-    generate_cover_image(client, content, label, sb)
+    generate_cover_image(client, content, label, sb, monday, sunday)
 
     return content
 
