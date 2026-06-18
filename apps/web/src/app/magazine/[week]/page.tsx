@@ -73,10 +73,6 @@ function withTimeout<T>(promise: PromiseLike<T>, message: string): Promise<T> {
   ])
 }
 
-function formatMagazineNumber(weekLabel: string) {
-  return weekLabel.replaceAll('-', '')
-}
-
 // -----------------------------------------------------------------------
 // セクションヘッダー
 // -----------------------------------------------------------------------
@@ -406,13 +402,6 @@ export default function MagazineWeekPage() {
   )
 
   const { content } = magazine
-  const start = new Date(magazine.week_start).toLocaleDateString('ja-JP', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  })
-  const end = new Date(magazine.week_end).toLocaleDateString('ja-JP', {
-    month: 'long', day: 'numeric',
-  })
-  const magazineNumber = formatMagazineNumber(magazine.week_label)
   const coverImageUrl = getMagazineCoverUrl(magazine.week_label, magazine.cover_image_url)
   const precomposedCover = hasLocalMagazineCover(magazine.week_label) || magazine.cover_image_url !== null
 
@@ -445,12 +434,11 @@ export default function MagazineWeekPage() {
                 <p className="text-xs font-semibold tracking-[0.35em] mt-4">一郎ライブラリー マガジン</p>
               </div>
               <div className="space-y-3">
-                <p className="text-sm font-mono font-bold tracking-[0.24em]">{magazineNumber}</p>
                 <h1 className="text-3xl font-bold leading-tight">{content.headline}</h1>
               </div>
             </div>
           )}
-          {!precomposedCover && (
+          {coverImageUrl && (
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-5">
               <h1 className="text-xl font-bold leading-snug text-white">{content.headline}</h1>
             </div>
