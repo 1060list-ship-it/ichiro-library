@@ -246,7 +246,6 @@ def _make_cover(
     image_bytes: bytes,
     issue_number: str,
     date_range: str,
-    headline: str,
 ) -> bytes:
     """
     静的 PNG オーバーレイ（ICHIRO LIBRARY ロゴ）＋ Pillow 可変テキスト合成。
@@ -311,12 +310,8 @@ def _make_cover(
     zen_kaku_path = str(get_zen_kaku_bold_path())
     zen_antique_path = str(get_zen_antique_path())
 
-    # w番号フォントサイズ: テンプレートのバウンディングボックス高さ 64px × sy
     f_issue = ImageFont.truetype(zen_kaku_path, int(52 * sy))
-    # 日付フォントサイズ: テンプレートのバウンディングボックス高さ 64px だが文字が小さい
-    f_date = ImageFont.truetype(zen_kaku_path, int(28 * sy))
-    # 見出しフォントサイズ: テンプレートのバウンディングボックス高さ 80px × sy
-    f_headline = ImageFont.truetype(zen_antique_path, int(65 * sy))
+    f_date  = ImageFont.truetype(zen_kaku_path, int(28 * sy))
 
     # ── 5. w番号（右寄せ、右端 x≈977） ─────────────────────────────────────
     right_x = int(1036 * sx)  # テンプレート右端 x=1036 をスケール
@@ -343,38 +338,7 @@ def _make_cover(
         fill=text_color,
     )
 
-    # ── 7. 見出し（左寄せ、折り返しあり） ──────────────────────────────────
-    left_x = int(68 * sx)  # テンプレート x=68 をスケール
-    top_y_headline = int(1296 * sy)  # テンプレート y=1296 をスケール
-    max_text_w = int(350 * sx)  # テンプレート幅 350px をスケール（折り返し上限）
-
-    def wrap_chars(text: str, font: ImageFont.FreeTypeFont) -> list[str]:
-        lines, cur = [], ""
-        for c in text:
-            test = cur + c
-            if draw.textlength(test, font=font) <= max_text_w:
-                cur = test
-            else:
-                if cur:
-                    lines.append(cur)
-                cur = c
-        if cur:
-            lines.append(cur)
-        return lines
-
-    hl_lines = wrap_chars(headline, f_headline)
-    line_gap = int(f_headline.size * 0.25)
-    hl_h = f_headline.size + line_gap
-
-    for i, line in enumerate(hl_lines):
-        draw.text(
-            (left_x, top_y_headline + i * hl_h),
-            line,
-            font=f_headline,
-            fill=text_color,
-        )
-
-    # ── 8. 出力 ─────────────────────────────────────────────────────────────
+    # ── 7. 出力 ─────────────────────────────────────────────────────────────
     out = base.convert("RGB")
     buf = BytesIO()
     out.save(buf, format="PNG", optimize=True)
@@ -436,7 +400,7 @@ def generate_cover_image(
         date_range = f"{monday.strftime('%Y/%m/%d')} – {sunday.strftime('%m/%d')}"
         week_num = int(monday.strftime("%W"))
         issue_display = f"w{week_num}"
-        image_bytes = _make_cover(image_bytes, issue_display, date_range, content.get("headline", ""))
+        image_bytes = _make_cover(image_bytes, issue_display, date_range)
 
         file_path = f"{label}.png"
         sb.storage.from_(STORAGE_BUCKET).upload(
