@@ -229,6 +229,19 @@ def _sanitize_cover_prompt(raw: str, label: str) -> str:
     return raw
 
 
+def _check_image_for_text(image_bytes: bytes, gemini_client) -> bool:
+    import base64
+    response = gemini_client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
+            'Does this image contain any visible text, letters, numbers, kanji, kana, roman characters, or writing of any kind? Answer only YES or NO.',
+        ],
+    )
+    answer = response.text.strip().upper()
+    return answer.startswith('YES')
+
+
 def _make_cover(
     image_bytes: bytes,
     issue_number: str,
@@ -400,14 +413,25 @@ def generate_cover_image(
         if not openai_key:
             raise RuntimeError("OPENAI_API_KEY が未設定")
         openai_client = OpenAI(api_key=openai_key)
-        image_response = openai_client.images.generate(
-            model=IMAGE_MODEL,
-            prompt=image_prompt,
-            size=IMAGE_SIZE,
-            quality="high",
-            n=1,
-        )
-        image_bytes = base64.b64decode(image_response.data[0].b64_json)
+        image_bytes = None
+        for attempt in range(1, 4):
+            image_response = openai_client.images.generate(
+                model=IMAGE_MODEL,
+                prompt=image_prompt,
+                size=IMAGE_SIZE,
+                quality="high",
+                n=1,
+            )
+            image_bytes = base64.b64decode(image_response.data[0].b64_json)
+            has_text = _check_image_for_text(image_bytes, client)
+            if has_text and attempt < 3:
+                logger.warning(f"[{label}] カバー画像に文字を検出 — 再生成します ({attempt}/3)")
+                continue
+            if has_text:
+                logger.warning(f"[{label}] カバー画像に文字を3回連続で検出 — 最後の画像で続行します")
+            break
+        if image_bytes is None:
+            raise RuntimeError("カバー画像生成に失敗しました")
 
         date_range = f"{monday.strftime('%Y/%m/%d')} – {sunday.strftime('%m/%d')}"
         week_num = int(monday.strftime("%W"))
