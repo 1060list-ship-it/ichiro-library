@@ -452,10 +452,6 @@ export default function MagazineWeekPage() {
           )}
           {!precomposedCover && (
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-5">
-              <p className="text-xs text-gray-300 font-mono font-semibold tracking-widest mb-1">
-                {magazineNumber}
-              </p>
-              <p className="text-xs text-gray-300 mb-1.5">{start} 〜 {end}</p>
               <h1 className="text-xl font-bold leading-snug text-white">{content.headline}</h1>
             </div>
           )}
