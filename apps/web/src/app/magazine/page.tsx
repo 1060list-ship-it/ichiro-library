@@ -126,10 +126,6 @@ export default function MagazinePage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0 py-1">
-                    <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1.5">
-                      <span className="text-indigo-400 font-mono font-semibold">{magazineNumber}</span>
-                      <span>{start}〜{end}</span>
-                    </p>
                     <p className="text-base font-bold text-white leading-snug line-clamp-2 mb-2 group-hover:text-indigo-100 transition-colors">
                       {mag.content.headline}
                     </p>

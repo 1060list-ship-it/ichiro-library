@@ -414,7 +414,7 @@ export default function MagazineWeekPage() {
   })
   const magazineNumber = formatMagazineNumber(magazine.week_label)
   const coverImageUrl = getMagazineCoverUrl(magazine.week_label, magazine.cover_image_url)
-  const precomposedCover = hasLocalMagazineCover(magazine.week_label)
+  const precomposedCover = hasLocalMagazineCover(magazine.week_label) || magazine.cover_image_url !== null
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -468,6 +468,11 @@ export default function MagazineWeekPage() {
             </div>
           )}
         </div>
+
+        {/* 見出し（画像の下に常時表示） */}
+        <h1 className="text-2xl font-bold text-white leading-snug -mt-4">
+          {content.headline}
+        </h1>
 
         {/* イントロ */}
         <div className="border-l-2 border-gray-700 pl-4">
