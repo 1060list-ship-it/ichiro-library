@@ -51,6 +51,8 @@ function HomeContent() {
     let data: Stream[] = []
 
     if (debouncedQuery.trim()) {
+      const keywords = debouncedQuery.trim().split(/\s+/).filter(Boolean)
+
       if (fuzzy) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const res = await (supabase as any).rpc('search_streams', {
@@ -61,10 +63,50 @@ function HomeContent() {
         })
         data = (res.data ?? []) as Stream[]
       } else {
-        const res = await supabase.from('streams').select('*')
-          .or(`title.ilike.%${debouncedQuery}%,summary.ilike.%${debouncedQuery}%`)
+        // 案1: 複数キーワードORテキスト検索
+        const textConds = keywords.flatMap(kw =>
+          [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
+        ).join(',')
+        const textRes = await supabase.from('streams').select('*')
+          .or(textConds)
           .order('stream_date', { ascending: false }).limit(20)
-        data = res.data ?? []
+        const textStreams = (textRes.data ?? []) as Stream[]
+
+        // 案3: エンティティ名・match_namesから関連配信を検索
+        const entityIds = new Set<string>()
+        await Promise.all(keywords.map(async kw => {
+          const [byName, byAlias] = await Promise.all([
+            supabase.from('entities').select('id').ilike('name', `%${kw}%`),
+            supabase.from('entities').select('id').contains('match_names', [kw]),
+          ])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(byName.data ?? []).forEach((e: any) => entityIds.add(e.id))
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(byAlias.data ?? []).forEach((e: any) => entityIds.add(e.id))
+        }))
+
+        let entityStreams: Stream[] = []
+        if (entityIds.size > 0) {
+          const seRes = await supabase.from('stream_entities')
+            .select('stream_id')
+            .in('entity_id', [...entityIds])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const streamIds = (seRes.data ?? []).map((r: any) => r.stream_id)
+          if (streamIds.length > 0) {
+            const sRes = await supabase.from('streams').select('*')
+              .in('id', streamIds)
+              .order('stream_date', { ascending: false }).limit(20)
+            entityStreams = (sRes.data ?? []) as Stream[]
+          }
+        }
+
+        // テキスト検索結果 + エンティティ経由結果をマージ・重複除去
+        const seen = new Set<string>()
+        data = [...textStreams, ...entityStreams].filter(s => {
+          if (seen.has(s.id)) return false
+          seen.add(s.id)
+          return true
+        })
       }
     } else if (view === 'top') {
       const res = await supabase.from('streams').select('*')
