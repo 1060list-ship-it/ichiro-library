@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Stream } from '@/lib/types'
 import StreamCard from '@/components/StreamCard'
@@ -19,13 +20,26 @@ const CATEGORIES = [
 
 type View = 'top' | string
 
-export default function Home() {
-  const [view, setView] = useState<View>('top')
-  const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [fuzzy, setFuzzy] = useState(false)
+function HomeContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const [view, setView] = useState<View>(() => searchParams.get('view') ?? 'top')
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
+  const [debouncedQuery, setDebouncedQuery] = useState(() => searchParams.get('q') ?? '')
+  const [fuzzy, setFuzzy] = useState(() => searchParams.get('fuzzy') === '1')
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
+
+  // URLクエリパラメータに状態を同期（ブラウザバックで検索を復元するため）
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (view !== 'top') params.set('view', view)
+    if (fuzzy) params.set('fuzzy', '1')
+    const qs = params.toString()
+    router.replace(qs ? `?${qs}` : '/', { scroll: false })
+  }, [query, view, fuzzy, router])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 400)
@@ -172,5 +186,13 @@ export default function Home() {
         <p className="mt-1">非公式ファンサイト。サカナクション・山口一郎とは無関係です。</p>
       </footer>
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-950" />}>
+      <HomeContent />
+    </Suspense>
   )
 }
