@@ -169,6 +169,8 @@ function HomeContent() {
     fetchStreams()
   }, [fetchStreams])
 
+  const [showHelp, setShowHelp] = useState(false)
+
   const isSearching = debouncedQuery.trim().length > 0
   const currentLabel = CATEGORIES.find(c => c.key === view)?.label
   const showRank = view === 'ranking-view' || view === 'ranking-waiwai'
@@ -208,6 +210,52 @@ function HomeContent() {
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
         <SearchBar value={query} onChange={setQuery} fuzzy={fuzzy} onFuzzyChange={setFuzzy} />
+
+        {/* 検索ガイド */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowHelp(v => !v)}
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          >
+            <span>{showHelp ? '▾' : '▸'}</span>
+            <span>検索の使い方</span>
+          </button>
+          {showHelp && (
+            <div className="mt-2 rounded-lg bg-gray-900 border border-gray-800 p-4 text-xs text-gray-400 space-y-3">
+              <div className="space-y-1.5">
+                <p className="text-gray-300 font-semibold">キーワード検索</p>
+                <p>入力したキーワードをタイトル・要約から検索します。</p>
+                <p>スペース区切りで複数入力すると <span className="text-white font-mono">OR</span> 検索になります。</p>
+                <div className="font-mono text-gray-500 space-y-0.5">
+                  <p><span className="text-gray-300">浜田 ハマダ</span> → どちらかにヒットするものを表示</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-gray-300 font-semibold">除外検索</p>
+                <p><span className="text-white font-mono">-</span> を先頭につけたキーワードを含む配信を除外します。</p>
+                <div className="font-mono text-gray-500 space-y-0.5">
+                  <p><span className="text-gray-300">浜田 -ゲーム</span> → 浜田を含み、ゲームを含まない</p>
+                  <p><span className="text-gray-300">-深夜 -歌</span> → 深夜と歌を両方除外</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-gray-300 font-semibold">あいまい検索</p>
+                <p>検索欄右のトグルをオンにすると、表記ゆれや関連語もまとめてヒットします。</p>
+                <p className="text-gray-500">例：「さかな」で「サカナクション」もヒット</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-gray-300 font-semibold">人物・エンティティ検索</p>
+                <p>登録済みの人物名や別名（表記ゆれ）でも検索できます。テキストに名前が出ていない配信でも、エンティティとして紐付けられていれば表示されます。</p>
+                <p className="mt-1">
+                  <Link href="/entity" className="text-indigo-400 hover:text-indigo-300 underline">
+                    人物索引を見る →
+                  </Link>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* セクションタイトル */}
         <div className="flex items-center gap-3">
