@@ -51,30 +51,44 @@ function HomeContent() {
     let data: Stream[] = []
 
     if (debouncedQuery.trim()) {
-      const keywords = debouncedQuery.trim().split(/\s+/).filter(Boolean)
+      const parts = debouncedQuery.trim().split(/\s+/).filter(Boolean)
+      const includes = parts.filter(k => !k.startsWith('-'))
+      const excludes = parts.filter(k => k.startsWith('-')).map(k => k.slice(1)).filter(Boolean)
 
       if (fuzzy) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const res = await (supabase as any).rpc('search_streams', {
-          query: debouncedQuery,
+          query: includes.join(' ') || debouncedQuery,
           sort_by: 'date_desc',
           page_num: 1,
           page_size: 20,
         })
-        data = (res.data ?? []) as Stream[]
+        const results = (res.data ?? []) as Stream[]
+        // fuzzyは後段でJS除外
+        data = excludes.length > 0
+          ? results.filter(s => excludes.every(ex =>
+              !s.title?.toLowerCase().includes(ex.toLowerCase()) &&
+              !s.summary?.toLowerCase().includes(ex.toLowerCase())
+            ))
+          : results
       } else {
-        // 案1: 複数キーワードORテキスト検索
-        const textConds = keywords.flatMap(kw =>
-          [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
-        ).join(',')
-        const textRes = await supabase.from('streams').select('*')
-          .or(textConds)
-          .order('stream_date', { ascending: false }).limit(20)
-        const textStreams = (textRes.data ?? []) as Stream[]
+        // テキストOR検索（includeキーワード）
+        let textStreams: Stream[] = []
+        if (includes.length > 0) {
+          const textConds = includes.flatMap(kw =>
+            [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
+          ).join(',')
+          let q = supabase.from('streams').select('*').or(textConds)
+          for (const ex of excludes) {
+            q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
+          }
+          const textRes = await q.order('stream_date', { ascending: false }).limit(20)
+          textStreams = (textRes.data ?? []) as Stream[]
+        }
 
-        // 案3: エンティティ名・match_namesから関連配信を検索
+        // エンティティ名・match_namesから関連配信を検索（includeのみ使用）
         const entityIds = new Set<string>()
-        await Promise.all(keywords.map(async kw => {
+        await Promise.all(includes.map(async kw => {
           const [byName, byAlias] = await Promise.all([
             supabase.from('entities').select('id').ilike('name', `%${kw}%`),
             supabase.from('entities').select('id').contains('match_names', [kw]),
@@ -93,14 +107,16 @@ function HomeContent() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const streamIds = (seRes.data ?? []).map((r: any) => r.stream_id)
           if (streamIds.length > 0) {
-            const sRes = await supabase.from('streams').select('*')
-              .in('id', streamIds)
-              .order('stream_date', { ascending: false }).limit(20)
+            let q = supabase.from('streams').select('*').in('id', streamIds)
+            for (const ex of excludes) {
+              q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
+            }
+            const sRes = await q.order('stream_date', { ascending: false }).limit(20)
             entityStreams = (sRes.data ?? []) as Stream[]
           }
         }
 
-        // テキスト検索結果 + エンティティ経由結果をマージ・重複除去
+        // マージ・重複除去
         const seen = new Set<string>()
         data = [...textStreams, ...entityStreams].filter(s => {
           if (seen.has(s.id)) return false

@@ -14,7 +14,7 @@ export default function SearchBar({ value, onChange, fuzzy, onFuzzyChange }: Pro
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder="キーワードで検索..."
+        placeholder="キーワードで検索… 除外は -キーワード"
         className="w-full rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-gray-500"
       />
       <div className="flex items-center justify-end gap-2">
