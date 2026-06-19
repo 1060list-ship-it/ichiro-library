@@ -1,6 +1,6 @@
 """
 表紙画像 モデル比較テスト
-Imagen 4 Ultra / gpt-image-2 を同一プロンプトで生成して保存する。
+Gemini 3.1 Flash Image / gpt-image-2 を同一プロンプトで生成して保存する。
 
 使い方:
   cd packages/pipeline
@@ -36,16 +36,22 @@ def build_image_prompt(gemini_key: str) -> str:
 
 # ── ステップ2: 各モデルで生成 ─────────────────────────────────────────────
 
-def gen_imagen_ultra(prompt: str, gemini_key: str) -> bytes:
+def gen_gemini_flash_image(prompt: str, gemini_key: str) -> bytes:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=gemini_key)
-    res = client.models.generate_images(
-        model="imagen-4.0-ultra-generate-001",
-        prompt=prompt,
-        config=types.GenerateImagesConfig(number_of_images=1, aspect_ratio="3:4"),
+    res = client.models.generate_content(
+        model="gemini-3.1-flash-image",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+            image_config=types.ImageConfig(aspect_ratio="3:4"),
+        ),
     )
-    return res.generated_images[0].image.image_bytes
+    for part in res.candidates[0].content.parts:
+        if part.inline_data is not None:
+            return part.inline_data.data
+    raise ValueError("画像が生成されませんでした")
 
 
 def gen_gpt_image2(prompt: str, openai_key: str) -> bytes:
@@ -85,8 +91,8 @@ def main():
     print(f"  プロンプト:\n  {image_prompt[:120]}...\n")
 
     models = [
-        ("imagen4_ultra", lambda: gen_imagen_ultra(image_prompt, gemini_key)),
-        ("gpt_image2",    lambda: gen_gpt_image2(image_prompt, openai_key)),
+        ("gemini_flash_image", lambda: gen_gemini_flash_image(image_prompt, gemini_key)),
+        ("gpt_image2",         lambda: gen_gpt_image2(image_prompt, openai_key)),
     ]
 
     results = []

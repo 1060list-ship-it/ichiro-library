@@ -455,6 +455,15 @@ export default function AdminPageClient() {
           </div>
         ) : dashboard ? (
           <>
+            <section className="flex justify-end">
+              <Link
+                href="/admin/entity"
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
+              >
+                エンティティ管理 →
+              </Link>
+            </section>
+
             <section className="grid grid-cols-3 gap-4">
               <StatCard label="登録動画数" value={dashboard.summary.totalCount} />
               <StatCard label="未レビュー数" value={dashboard.summary.unreviewedCount} />

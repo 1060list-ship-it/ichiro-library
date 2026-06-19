@@ -466,6 +466,126 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
   return data
 }
 
+// ── Entity management ────────────────────────────────────────────────────────
+
+export type AdminEntity = {
+  id: string
+  slug: string
+  name: string
+  match_names: string[]
+  category: string
+  role: string | null
+  description: string
+  related_work: string | null
+  external_url: string | null
+  sort_order: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type AdminEntityStream = {
+  id: string
+  video_id: string
+  title: string
+  stream_date: string
+}
+
+export type UpsertAdminEntityInput = {
+  id?: string
+  name: string
+  slug: string
+  category: string
+  role: string
+  description: string
+  matchNames: string[]
+  relatedWork: string
+  externalUrl: string
+  sortOrder: string
+}
+
+export async function fetchAdminEntities(): Promise<AdminEntity[]> {
+  await requireAdminSession()
+  const { data, error } = await supabaseAdmin
+    .from('entities')
+    .select('*')
+    .order('category', { ascending: true })
+    .order('sort_order', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as AdminEntity[]
+}
+
+export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> {
+  await requireAdminSession()
+  const { data, error } = await supabaseAdmin
+    .from('entities')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data as AdminEntity | null
+}
+
+export async function fetchAdminEntityStreams(entityId: string): Promise<AdminEntityStream[]> {
+  await requireAdminSession()
+  const { data: relations, error: relErr } = await supabaseAdmin
+    .from('stream_entities')
+    .select('stream_id')
+    .eq('entity_id', entityId)
+  if (relErr) throw relErr
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ids = (relations ?? []).map((r: any) => r.stream_id)
+  if (ids.length === 0) return []
+  const { data, error } = await supabaseAdmin
+    .from('streams')
+    .select('id, video_id, title, stream_date')
+    .in('id', ids)
+    .order('stream_date', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as AdminEntityStream[]
+}
+
+export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<AdminEntity> {
+  await requireAdminSession()
+  const payload = {
+    name: input.name.trim(),
+    slug: input.slug.trim(),
+    category: input.category,
+    role: input.role.trim() || null,
+    description: input.description.trim(),
+    match_names: input.matchNames,
+    related_work: input.relatedWork.trim() || null,
+    external_url: input.externalUrl.trim() || null,
+    sort_order: input.sortOrder !== '' ? Number(input.sortOrder) : null,
+  }
+  let result
+  if (input.id) {
+    result = await supabaseAdmin
+      .from('entities')
+      .update(payload as never)
+      .eq('id', input.id)
+      .select('*')
+      .single()
+  } else {
+    result = await supabaseAdmin
+      .from('entities')
+      .insert(payload as never)
+      .select('*')
+      .single()
+  }
+  if (result.error) throw result.error
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
+  return result.data as AdminEntity
+}
+
+export async function deleteAdminEntity(id: string): Promise<void> {
+  await requireAdminSession()
+  const { error } = await supabaseAdmin.from('entities').delete().eq('id', id)
+  if (error) throw error
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
+}
+
 export async function markStreamReviewed(videoId: string): Promise<AdminEditableStream> {
   await requireAdminSession()
 
