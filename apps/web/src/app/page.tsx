@@ -9,13 +9,13 @@ import StreamCard from '@/components/StreamCard'
 import SearchBar from '@/components/SearchBar'
 
 const CATEGORIES = [
-  { key: 'ranking-view',   label: '再生数' },
-  { key: 'ranking-waiwai', label: 'ワイワイ' },
-  { key: 'ライブビデオ解説', label: 'ライブビデオ解説' },
-  { key: '深夜対談',        label: '深夜対談' },
-  { key: '未知との遭遇',    label: '未知との遭遇' },
-  { key: 'ゲーム実況',      label: 'ゲーム実況' },
-  { key: '歌唱あり',        label: '歌唱あり' },
+  { key: 'ranking-view',   label: '再生数',        description: '再生数が多い配信ランキング' },
+  { key: 'ranking-waiwai', label: 'ワイワイ',       description: 'コメント数＝盛り上がり度が高かった配信ランキング' },
+  { key: 'ライブビデオ解説', label: 'ライブビデオ解説', description: 'MVやライブ映像を一郎がリアルタイムで解説するコーナー' },
+  { key: '深夜対談',        label: '深夜対談',       description: '深夜に仲間と本音で語り合うトークコーナー' },
+  { key: '未知との遭遇',    label: '未知との遭遇',   description: '一郎が知らないアーティストや楽曲に初めて触れるコーナー' },
+  { key: 'ゲーム実況',      label: 'ゲーム実況',     description: '一郎がゲームをプレイ・実況する配信' },
+  { key: '歌唱あり',        label: '歌唱あり',       description: 'ライブ中に歌唱シーンがある配信' },
 ]
 
 type View = 'top' | string
@@ -172,7 +172,9 @@ function HomeContent() {
   const [showHelp, setShowHelp] = useState(false)
 
   const isSearching = debouncedQuery.trim().length > 0
-  const currentLabel = CATEGORIES.find(c => c.key === view)?.label
+  const currentCategory = CATEGORIES.find(c => c.key === view)
+  const currentLabel = currentCategory?.label
+  const currentDescription = currentCategory?.description
   const showRank = view === 'ranking-view' || view === 'ranking-waiwai'
 
   return (
@@ -258,18 +260,23 @@ function HomeContent() {
         </div>
 
         {/* セクションタイトル */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           {view !== 'top' && !isSearching && (
             <button
               onClick={() => setView('top')}
-              className="text-xs text-gray-400 hover:text-white"
+              className="text-xs text-gray-400 hover:text-white mt-0.5 flex-shrink-0"
             >
               ← TOP
             </button>
           )}
-          <h2 className="text-sm font-semibold text-gray-300">
-            {isSearching ? `「${debouncedQuery}」の検索結果` : view === 'top' ? '最近の配信' : currentLabel}
-          </h2>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300">
+              {isSearching ? `「${debouncedQuery}」の検索結果` : view === 'top' ? '最近の配信' : currentLabel}
+            </h2>
+            {!isSearching && view !== 'top' && currentDescription && (
+              <p className="text-xs text-gray-500 mt-0.5">{currentDescription}</p>
+            )}
+          </div>
         </div>
 
         {loading ? (
