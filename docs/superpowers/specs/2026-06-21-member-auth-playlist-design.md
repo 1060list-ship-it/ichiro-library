@@ -2,7 +2,7 @@
 
 **作成日**: 2026-06-21  
 **対象プロジェクト**: ichiro-library  
-**ステータス**: 承認済み
+**ステータス**: 承認済み（最終版 2026-06-21 レビュー反映済み）
 
 ---
 
@@ -55,9 +55,26 @@ async function requireRole(role: 'editor' | 'admin' | ('editor' | 'admin')[]) {
 
 ### ルート保護：proxy.ts ＋ DAL の二段構成
 - **`proxy.ts`（Next.js 16 での middleware の名称）**：Cookie の有無だけ見る optimistic なリダイレクト（DB チェックは行わない。唯一の防御線にしない）
+- **`proxy.ts` はセッションリフレッシュも担う**：毎リクエストで `supabase.auth.getUser()` を呼び、更新された Cookie（`Set-Cookie`）をレスポンスに付与する。これがないと access token（デフォルト1時間）がサイレントに切れ、Server Action が突然 Unauthorized を返す
 - **各ページ / Server Action の DAL**：`verifySession()` + `requireRole()` で本当の認可を行う
+- `requireRole()` は `React.cache()` でリクエスト内メモ化し、1リクエストあたり DB 往復を1回に抑える
 
 > ⚠️ Next.js 16.2.4 では `middleware.ts` は deprecated → `proxy.ts` を使用。実装時は `node_modules/next/dist/docs/` を正典とすること。
+
+### セッション切れ時のハンドリング
+
+- D&D 並び替え中・プレイリスト編集中にセッションが切れた場合：Server Action が Unauthorized を返したらクライアントは `/login?return=/member` へリダイレクト
+- オートセーブ（後述）により編集中データは逐次保存されるため、セッション切れによる作業ロストは最小化される
+
+### 権限剥奪時の即時失効
+
+- `user_roles` 行を削除しても**発行済み JWT は有効期限まで生き続ける**
+- 対策：`requireRole()` は毎回 `user_roles` テーブルを SELECT してロールを確認する（JWT クレームのみで判断しない）。これにより権限剥奪後の次リクエストで即座にブロックできる
+
+### ログアウト
+
+- `supabase.auth.signOut()` を呼び、全デバイスのセッションを失効させる
+- 既存の `clearAdminSession()`（Cookie削除）は Supabase の signOut に置き換える
 
 ### 権限マトリクス
 | 機能 | 未ログイン | editor | admin |
@@ -75,6 +92,8 @@ async function requireRole(role: 'editor' | 'admin' | ('editor' | 'admin')[]) {
 
 ## 3. DBスキーマ（追加）
 
+> **注意**: 全テーブルに `ALTER TABLE xxx ENABLE ROW LEVEL SECURITY;` が必須。migration SQL に必ず含めること。
+
 ### user_roles テーブル
 ```sql
 CREATE TABLE user_roles (
@@ -83,7 +102,9 @@ CREATE TABLE user_roles (
   granted_by UUID REFERENCES auth.users(id),
   granted_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 -- RLS: 書き込みは service-role のみ。本人行の読み取りのみ許可
+-- 注意: user_id が PRIMARY KEY のため1ユーザー1ロール固定。複数ロールが将来必要になった時は (user_id, role) 複合PKへ変更する
 ```
 
 ### playlists テーブル
@@ -92,30 +113,39 @@ CREATE TABLE playlists (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title       TEXT NOT NULL,
   description TEXT,
-  created_by  UUID REFERENCES auth.users(id),
+  created_by  UUID NOT NULL REFERENCES auth.users(id),  -- 作成者必須
   updated_by  UUID REFERENCES auth.users(id),
   created_at  TIMESTAMPTZ DEFAULT now(),
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
--- RLS: 読み取りは全員OK。書き込みは editor + admin のみ
+ALTER TABLE playlists ENABLE ROW LEVEL SECURITY;
+-- updated_at 自動更新トリガー（既存の update_updated_at() 関数を流用）
+CREATE TRIGGER playlists_updated_at
+  BEFORE UPDATE ON playlists
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+-- RLS: 読み取りは全員OK。書き込みは editor + admin のみ（service-role経由）
 ```
 
 ### playlist_streams テーブル
 ```sql
 CREATE TABLE playlist_streams (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  playlist_id UUID REFERENCES playlists(id) ON DELETE CASCADE,
-  stream_id   UUID NOT NULL REFERENCES streams(id) ON DELETE CASCADE,  -- FK必須
-  position    NUMERIC NOT NULL,   -- fractional indexing（小数・大間隔採番）
+  playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  stream_id   UUID NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  position    NUMERIC(12,4) NOT NULL,  -- fractional indexing（精度固定）
   added_by    UUID REFERENCES auth.users(id),
   added_at    TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (playlist_id, position)
+  UNIQUE (playlist_id, position),
+  UNIQUE (playlist_id, stream_id)  -- 同一ストリームの重複追加防止
 );
+ALTER TABLE playlist_streams ENABLE ROW LEVEL SECURITY;
+-- 順序取得クエリ用インデックス
+CREATE INDEX idx_playlist_streams_order ON playlist_streams(playlist_id, position);
 ```
 
-**position について**：D&D 並び替え時の制約違反を避けるため `NUMERIC` 型で fractional indexing を採用。初期値は `1000, 2000, 3000...` など大きな間隔で採番。並び替えは隣接2点の中間値を1行 UPDATE するだけで完結する。小数枯渇時のリバランスは実装タスクとする。
+**position について**：`NUMERIC(12,4)` で fractional indexing を採用。初期値は `1000, 2000, 3000...` など大きな間隔で採番。並び替えは隣接2点の中間値を1行 UPDATE するだけで完結する。小数枯渇時のリバランスは実装タスク。同時に2つの editor が同じ位置へドロップした場合は楽観ロック（UNIQUE違反→クライアント側リトライ）で対処。
 
-**stream_id について**：`streams(id)` UUID への FK を張ることで存在しないストリームの追加を DB レベルで防ぐ。UI での入力は YouTube `video_id`（例：`dQw4w9WgXcQ`）で行い、サーバー側で `streams.video_id` を検索して `streams.id` UUID に変換してから保存する。
+**stream_id について**：`streams(id)` UUID への FK を張ることで存在しないストリームを DB レベルで防ぐ。UI での入力は YouTube `video_id`（例：`dQw4w9WgXcQ`）で行い、サーバー側で `streams.video_id` を検索して `streams.id` UUID に変換してから保存する。
 
 ### bookmarks テーブル
 ```sql
@@ -125,10 +155,12 @@ CREATE TABLE bookmarks (
   created_at TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (user_id, stream_id)
 );
+ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
+CREATE INDEX idx_bookmarks_stream ON bookmarks(stream_id);
 -- RLS: 本人行のみ読み書き可
 ```
 
-- ログイン中の editor / admin のみ操作可能
+- ログイン中の editor / admin のみ操作可能（未ログインには★ボタン非表示）
 - 同一ストリームの重複ブックマークは PK 制約で防ぐ
 
 ### entity_word_requests テーブル
@@ -136,14 +168,15 @@ CREATE TABLE bookmarks (
 ```sql
 CREATE TABLE entity_word_requests (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity_id    UUID REFERENCES entities(id),
-  word         TEXT NOT NULL,
+  entity_id    UUID NOT NULL REFERENCES entities(id),  -- NOT NULL 必須
+  word         TEXT NOT NULL CHECK (word <> '' AND word = TRIM(word)),  -- 空白不可
   status       TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   requested_by UUID REFERENCES auth.users(id),
   reviewed_by  UUID REFERENCES auth.users(id),
   requested_at TIMESTAMPTZ DEFAULT now(),
   reviewed_at  TIMESTAMPTZ
 );
+ALTER TABLE entity_word_requests ENABLE ROW LEVEL SECURITY;
 -- 部分ユニークインデックス：同一 entity + word の pending 申請は1件まで
 CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pending';
 ```
@@ -188,7 +221,7 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 説明:     [___________________]
 
 ストリームを追加：
-  [タイトルで検索___] [タグ ▼] [エンティティ ▼] [日付 ▼] [検索]
+  [タイトル・AI要約で検索___] [タグ ▼] [エンティティ ▼] [日付 ▼] [検索]
   または YouTube動画ID: [dQw4w9WgXcQ] [追加]
 
   検索結果：
@@ -205,6 +238,7 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 
 **検索フィルタの仕様：**
 
+- テキスト検索：`streams.title`（タイトル）と `streams.summary`（AI要約）を対象に OR 検索。キーワードは両フィールドをまたいでヒットする
 - タグ（`topics`）：既存 `streams.topics` カラムを参照
 - エンティティ：`entities` テーブルから名前で絞り込み（例：「ドラクエ11」）
 - 日付：配信日の範囲指定
@@ -257,13 +291,29 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 
 ## 7. 移行方針
 
+### 移行対象の正確な箇所（草薙調査）
+
+「26本」ではなく実態は以下の通り：
+
+- `actions.ts` 内 `requireAdminSession()` 呼び出し：**14箇所**
+- ページ DAL 側 `checkAdminSession()` 直呼び：**3箇所**（`admin/entity/page.tsx` 等）
+- クライアント hook `useAdminAuth.ts`：**1ファイル廃止**
+
+移行前にこの18箇所リストを確定し、各々の差し替え先を1対1で対応表にすること。
+
 ### 段階的切替（ロックアウト防止）
-1. Supabase Auth 導入・`user_roles` テーブル作成
+
+1. Supabase Auth 導入・`user_roles` テーブル作成・`proxy.ts` 新規作成
 2. **一幾の admin アカウントを先に作成**してから旧 Cookie 認証の廃止へ進む
-3. 共通認可ヘルパ（`requireRole()`）を新規作成
-4. 既存 `/admin/actions.ts` の `requireAdminSession()` 呼び出しを `requireRole('admin')` に順次差し替え（一括ではなく関数単位で段階的に）
-5. 全アクションの切替完了＋動作確認後、`ADMIN_PASSWORD` env var を削除
-6. 旧 `useAdminAuth.ts` / `verifyAdminPassword` を削除
+3. `requireRole()` ヘルパ新規作成。**並行稼働期間中は旧 Cookie 認証も一時的にフォールバックとして受理するブリッジ**を噛ませ、切替中に管理画面が半壊しないようにする
+4. 既存の `requireAdminSession()` / `checkAdminSession()` を `requireRole('admin')` に**ページ単位**で切替（関数1本ずつではなくページ単位で一括切替することで、半端な状態を避ける）
+5. 全ページの切替完了＋動作確認後、1〜2週間様子見してから `ADMIN_PASSWORD` env var を削除
+6. 旧 `useAdminAuth.ts` / `verifyAdminPassword` / `clearAdminSession` を削除
+
+### ロールバック手順
+
+- 手順5（`ADMIN_PASSWORD` 削除）実行前まではいつでも旧認証に戻せる
+- `user_roles` テーブルと旧 Cookie ロジックは手順6まで残す
 
 ### 最初の admin 作成手順（シード）
 ```sql
@@ -274,7 +324,68 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 
 ---
 
-## 8. 追加パッケージ
+## 8. 検索アーキテクチャ
+
+既存の `search_streams` RPC（`SECURITY DEFINER`、anon に EXECUTE 付与済み）を**拡張して一本化**する。新たな検索系統は追加しない。
+
+### 拡張する引数
+
+既存引数に以下を追加：
+
+- `filter_entity_id UUID DEFAULT NULL`：エンティティ名でのフィルタ（`stream_entities` 中間テーブル経由 JOIN）
+- `bookmark_user_id UUID DEFAULT NULL`：指定ユーザーのブックマーク済みのみ返す
+
+### テキスト検索範囲の拡張
+
+既存のタイトル検索に `streams.summary`（AI要約）を OR 追加する。
+
+```sql
+-- 既存: title ILIKE query
+-- 変更後: title ILIKE query OR summary ILIKE query
+```
+
+これにより検索系統は anon用RPC（拡張版）1本に統一される。admin/member ともにこの RPC を呼ぶ。
+
+---
+
+## 9. UX 仕様（確定）
+
+### オートセーブ
+
+- 追加・削除・並び替えの操作が完了するたびに**即時自動保存**
+- 編集画面の上部に常時「✓ 保存済み」「● 保存中…」を表示
+- セッション切れで保存失敗した場合は「⚠ 保存失敗 — ログインし直してください」を表示
+
+### モバイル対応
+
+- D&D はデスクトップ専用。モバイルでは各エピソード行に **↑ / ↓ ボタン**を表示する
+- スティッキープレイヤーはモバイルでスクロール時に縮小表示（shrink on scroll）
+- タブのタップ領域は最低 44px 確保
+
+### ブックマーク表示制御
+
+- [★] ボタンは**ログイン中の editor / admin のみ表示**。未ログインには非表示
+
+### 最終エピソード後の処理
+
+- YouTube iframe に `rel=0` パラメータを付与し、再生終了後の関連動画表示をオフ
+- 最終エピソード再生終了後に「このプレイリストはここまでです」メッセージをオーバーレイ表示
+
+### 再生済みマーク
+
+- `localStorage` にブラウザローカルで保持
+- 閲覧ページに「再生状況はこのブラウザのみで保持されます」を一行表示
+
+### 今回スコープ外（将来課題）
+
+- プレイリストの公開 / 下書き状態
+- プレイリストのカバー画像
+- 全話連続再生ボタン
+- エピソード単位シェアボタン
+
+---
+
+## 10. 追加パッケージ
 
 | パッケージ | 用途 |
 |-----------|------|
@@ -284,10 +395,11 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 
 ---
 
-## 9. 実装担当（案）
+## 11. 実装担当（案）
 
 | 担当 | 内容 |
 |------|------|
-| borma | DBスキーマ（migration SQL）・RLS ポリシー |
-| ishikawa | 認可レイヤ（`requireRole`・`verifySession`・`proxy.ts`）・Server Actions |
-| paz | `/member`・`/playlist/[id]`・トップページ プレイリストセクションの UI |
+| borma | DBスキーマ（migration SQL）・RLS ポリシー・`search_streams` RPC 拡張 |
+| ishikawa | 認可レイヤ（`requireRole`・`verifySession`・`proxy.ts`）・Server Actions・移行ブリッジ |
+| paz | `/member`・`/playlist/[id]`・トップページ プレイリストセクション・オートセーブ UI・モバイル対応 |
+| togusa | 権限マトリクス全セルの E2E テスト・移行並行稼働テスト・回帰テスト |
