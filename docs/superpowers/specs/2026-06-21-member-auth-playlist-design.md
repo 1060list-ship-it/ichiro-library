@@ -2,7 +2,7 @@
 
 **作成日**: 2026-06-21  
 **対象プロジェクト**: ichiro-library  
-**ステータス**: 承認済み（最終版 2026-06-21 レビュー反映済み）
+**ステータス**: Codex 8エージェント検証済み・修正版（2026-06-21）
 
 ---
 
@@ -57,7 +57,8 @@ async function requireRole(role: 'editor' | 'admin' | ('editor' | 'admin')[]) {
 - **`proxy.ts`（Next.js 16 での middleware の名称）**：Cookie の有無だけ見る optimistic なリダイレクト（DB チェックは行わない。唯一の防御線にしない）
 - **`proxy.ts` はセッションリフレッシュも担う**：毎リクエストで `supabase.auth.getUser()` を呼び、更新された Cookie（`Set-Cookie`）をレスポンスに付与する。これがないと access token（デフォルト1時間）がサイレントに切れ、Server Action が突然 Unauthorized を返す
 - **各ページ / Server Action の DAL**：`verifySession()` + `requireRole()` で本当の認可を行う
-- `requireRole()` は `React.cache()` でリクエスト内メモ化し、1リクエストあたり DB 往復を1回に抑える
+- `verifySession()` と `getCurrentUserRole()` をそれぞれ引数なしで `React.cache()` でリクエスト内メモ化し、1リクエストあたり DB 往復を1回に抑える。`requireRole(role)` への直接適用は配列引数でメモ化が機能しないため不可
+- **Server Action は操作ごとに別リクエスト**のため、オートセーブ連打での DB 照合削減効果はない（性能上許容範囲と判断）
 
 > ⚠️ Next.js 16.2.4 では `middleware.ts` は deprecated → `proxy.ts` を使用。実装時は `node_modules/next/dist/docs/` を正典とすること。
 
@@ -83,10 +84,12 @@ async function requireRole(role: 'editor' | 'admin' | ('editor' | 'admin')[]) {
 | プレイリスト作成・編集・削除 | ❌ | ✅ | ✅ |
 | エンティティ単語追加（申請） | ❌ | ✅申請のみ | ✅ |
 | エンティティ申請の承認・却下 | ❌ | ❌ | ✅ |
-| メンバー管理（追加・削除） | ❌ | ❌ | ✅ |
+| メンバー管理（追加・削除） | ❌ | ❌ | ✅（手動：Supabase ダッシュボード + SQL） |
 | ストリーム管理・タグ操作 | ❌ | ❌ | ✅ |
 
 **editor 間のプレイリスト権限**：全 editor が全プレイリストを編集・削除可（Wiki 型）。`created_by` / `updated_by` は記録し管理画面に表示する。
+
+> **メンバー管理の実装スコープ**：今回 `/admin` に「メンバー管理タブ」は作らない。追加は Supabase ダッシュボードでアカウント作成 → `user_roles` テーブルへ手動 INSERT の2ステップで行う（SMTP 設定・招待メール不要）。削除は `user_roles` 行の剥奪のみとし `auth.users` は消さない（FK 破損防止）。
 
 ---
 
@@ -132,7 +135,7 @@ CREATE TABLE playlist_streams (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
   stream_id   UUID NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
-  position    NUMERIC(12,4) NOT NULL,  -- fractional indexing（精度固定）
+  position    NUMERIC(18,8) NOT NULL,  -- fractional indexing（精度拡張：同一隙間への中間挿入耐久回数を大幅増）
   added_by    UUID REFERENCES auth.users(id),
   added_at    TIMESTAMPTZ DEFAULT now(),
   UNIQUE (playlist_id, position),
@@ -143,7 +146,11 @@ ALTER TABLE playlist_streams ENABLE ROW LEVEL SECURITY;
 CREATE INDEX idx_playlist_streams_order ON playlist_streams(playlist_id, position);
 ```
 
-**position について**：`NUMERIC(12,4)` で fractional indexing を採用。初期値は `1000, 2000, 3000...` など大きな間隔で採番。並び替えは隣接2点の中間値を1行 UPDATE するだけで完結する。小数枯渇時のリバランスは実装タスク。同時に2つの editor が同じ位置へドロップした場合は楽観ロック（UNIQUE違反→クライアント側リトライ）で対処。
+**position について**：`NUMERIC(18,8)` で fractional indexing を採用（`NUMERIC(12,4)` から拡張。同一隙間への中間挿入耐久回数が理論値 ~23回 → ~53回相当に改善）。初期値は `10000.00000000, 20000.00000000...` など大きな間隔で採番。並び替えは隣接2点の中間値を1行 UPDATE するだけで完結する。
+
+**リバランス条件**：Server Action は並び替え時に `position` の最小間隔（`0.00000001`）を下回りそうか判定し、下回る場合は同一 `playlist_id` の全行を `10000, 20000, 30000...` に整数リセットしてから更新する（transaction 内）。リバランス自体は稀で、一般ユーザーには不可視。
+
+同時に2つの editor が同じ位置へドロップした場合は楽観ロック（UNIQUE違反→クライアント側リトライ）で対処。
 
 **stream_id について**：`streams(id)` UUID への FK を張ることで存在しないストリームを DB レベルで防ぐ。UI での入力は YouTube `video_id`（例：`dQw4w9WgXcQ`）で行い、サーバー側で `streams.video_id` を検索して `streams.id` UUID に変換してから保存する。
 
@@ -157,11 +164,12 @@ CREATE TABLE bookmarks (
 );
 ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
 CREATE INDEX idx_bookmarks_stream ON bookmarks(stream_id);
--- RLS: 本人行のみ読み書き可
+-- RLS: 本人行のみ読み書き可（bookmarks は anon からは不可視）
 ```
 
 - ログイン中の editor / admin のみ操作可能（未ログインには★ボタン非表示）
 - 同一ストリームの重複ブックマークは PK 制約で防ぐ
+- **ブックマーク取得は Server Action 経由のみ**（公開 RPC には乗せない → セクション8参照）
 
 ### entity_word_requests テーブル
 
@@ -186,6 +194,20 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 ### 監査証跡の規約
 - `*_by` 列（`created_by`, `updated_by`, `added_by`, `requested_by`, `reviewed_by`）には各 Server Action 内で `requireRole()` から得た `user.id` を明示的に書き込む
 - service-role 経由の書き込みであっても、認証済みユーザーの ID を明示することで「誰がやったか」を記録する
+
+### `authenticated` ロールの READ 権限
+
+既存の公開 RLS ポリシーは `TO anon` で付与されており、ログイン後のクライアントは `authenticated` ロールで動作するため、明示的に `authenticated` への READ 権限が必要。migration で以下を追加すること：
+
+```sql
+-- 既存 anon READ ポリシーに authenticated を追加（streams, entities, stream_entities 等）
+-- 例:
+GRANT SELECT ON streams TO authenticated;
+GRANT EXECUTE ON FUNCTION search_streams TO authenticated;
+-- 他の公開テーブルも同様に追加
+```
+
+または既存ポリシーを `TO anon, authenticated` へ更新する。borma が migration 作成時に全テーブルを横断確認すること。
 
 ---
 
@@ -238,8 +260,8 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 
 **検索フィルタの仕様：**
 
-- テキスト検索：`streams.title`（タイトル）と `streams.summary`（AI要約）を対象に OR 検索。キーワードは両フィールドをまたいでヒットする
-- タグ（`topics`）：既存 `streams.topics` カラムを参照
+- テキスト検索：`search_streams` RPC（既存）が担当。現行 RPC はすでに title / summary / transcript / chapters を対象にしているため検索能力の変更なし
+- タグ：`streams.tags`（カテゴリタグ）を参照。`streams.talk_topics`（トーク話題）は将来拡張
 - エンティティ：`entities` テーブルから名前で絞り込み（例：「ドラクエ11」）
 - 日付：配信日の範囲指定
 - フィルタは AND 条件で組み合わせ可
@@ -275,8 +297,8 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
   ...
 ```
 
-- 既存の `StreamCard` コンポーネントを流用（番号・再生中インジケーター追加）
-- YouTube embed は既存の `/stream/[id]` 実装（`youtube.com/embed/${video_id}` iframe）を参照
+- 既存の `StreamCard` を**流用しない**。プレイリスト専用カードコンポーネントを作成（理由：既存 `StreamCard` はカード全体が `<a>` タグ。★ボタン等の操作 UI をネストすると HTML 仕様違反）
+- YouTube embed は既存の `/stream/[id]` と同じ `youtube.com/embed/${video_id}?rel=0&enablejsapi=1&origin=...` を使用（IFrame API 有効化が必要）
 - プレイリストが存在しない場合は `not-found.tsx` で 404 を返す
 
 **トップページのプレイリストセクション：**
@@ -296,16 +318,18 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 「26本」ではなく実態は以下の通り：
 
 - `actions.ts` 内 `requireAdminSession()` 呼び出し：**14箇所**
-- ページ DAL 側 `checkAdminSession()` 直呼び：**3箇所**（`admin/entity/page.tsx` 等）
+- ページ DAL 側 `checkAdminSession()` 直呼び：**2箇所**（`admin/entity/page.tsx` + `admin/entity/[id]/page.tsx`）
 - クライアント hook `useAdminAuth.ts`：**1ファイル廃止**
 
-移行前にこの18箇所リストを確定し、各々の差し替え先を1対1で対応表にすること。
+> ⚠️ `/admin/page.tsx` と `/admin/stream/[id]` は Server 側で認証していない（client-side `useAdminAuth` 経由）。これらは「関数差し替え」ではなく **server-first への構造置き換え**が必要で、別工程として計画すること。
+
+移行前にこの17箇所＋構造置き換え2ページのリストを確定し、各々の差し替え先を1対1で対応表にすること。
 
 ### 段階的切替（ロックアウト防止）
 
 1. Supabase Auth 導入・`user_roles` テーブル作成・`proxy.ts` 新規作成
 2. **一幾の admin アカウントを先に作成**してから旧 Cookie 認証の廃止へ進む
-3. `requireRole()` ヘルパ新規作成。**並行稼働期間中は旧 Cookie 認証も一時的にフォールバックとして受理するブリッジ**を噛ませ、切替中に管理画面が半壊しないようにする
+3. `requireRole()` ヘルパ新規作成。**並行稼働期間中は旧 Cookie 認証も一時的にフォールバックとして受理するブリッジ**を噛ませ、切替中に管理画面が半壊しないようにする。ブリッジの廃止条件は以下を全て満たしたとき：①全ページの切替完了、②一幾が `/admin` での動作を確認、③`ADMIN_PASSWORD` env var の削除準備完了。ブリッジは **admin ロールのみ**に適用（editor は Supabase Auth 専用）。ブリッジ稼働中は Server Action ログに「旧 Cookie 認証フォールバック使用」を記録する
 4. 既存の `requireAdminSession()` / `checkAdminSession()` を `requireRole('admin')` に**ページ単位**で切替（関数1本ずつではなくページ単位で一括切替することで、半端な状態を避ける）
 5. 全ページの切替完了＋動作確認後、1〜2週間様子見してから `ADMIN_PASSWORD` env var を削除
 6. 旧 `useAdminAuth.ts` / `verifyAdminPassword` / `clearAdminSession` を削除
@@ -328,23 +352,38 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 
 既存の `search_streams` RPC（`SECURITY DEFINER`、anon に EXECUTE 付与済み）を**拡張して一本化**する。新たな検索系統は追加しない。
 
-### 拡張する引数
+### 現行 RPC の検索範囲（変更なし）
+
+既存 RPC はすでに以下を検索しており、追加・変更しない：
+
+- `streams.title`（タイトル）
+- `streams.summary`（AI要約）
+- transcript セグメント
+- chapters タイトル
+
+### 追加する引数のみ
 
 既存引数に以下を追加：
 
-- `filter_entity_id UUID DEFAULT NULL`：エンティティ名でのフィルタ（`stream_entities` 中間テーブル経由 JOIN）
-- `bookmark_user_id UUID DEFAULT NULL`：指定ユーザーのブックマーク済みのみ返す
+- `filter_entity_id UUID DEFAULT NULL`：エンティティでのフィルタ（`stream_entities` 中間テーブル経由 JOIN）
 
-### テキスト検索範囲の拡張
+### ブックマークフィルタの分離（重要）
 
-既存のタイトル検索に `streams.summary`（AI要約）を OR 追加する。
+> ⚠️ **`bookmark_user_id` は公開 `search_streams` RPC に追加しない。**  
+> 理由：既存 RPC は `SECURITY DEFINER + GRANT EXECUTE TO anon` であり、anon が任意 UUID を渡せると他人のブックマーク集合を取得できる（bookmarks RLS を横から破る）。
 
-```sql
--- 既存: title ILIKE query
--- 変更後: title ILIKE query OR summary ILIKE query
+ブックマークフィルタは **Server Action として独立実装**する：
+
+```typescript
+// member 専用 Server Action（requireRole でログイン必須）
+async function fetchBookmarkedStreams(filters: StreamFilters) {
+  const { user } = await requireRole(['editor', 'admin'])
+  // server-side で user.id を使って bookmarks → streams を JOIN
+  // anon RPC は呼ばない
+}
 ```
 
-これにより検索系統は anon用RPC（拡張版）1本に統一される。admin/member ともにこの RPC を呼ぶ。
+これにより検索系統は anon用RPC（entity フィルタ拡張版）1本 ＋ member用 Server Action 1本に整理される。
 
 ---
 
@@ -353,13 +392,16 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 ### オートセーブ
 
 - 追加・削除・並び替えの操作が完了するたびに**即時自動保存**
-- 編集画面の上部に常時「✓ 保存済み」「● 保存中…」を表示
+- 編集画面の上部に常時「✓ 保存済み」「● 保存中…」を表示（sticky ヘッダーまたは操作行単位の pending 表示）
 - セッション切れで保存失敗した場合は「⚠ 保存失敗 — ログインし直してください」を表示
+
+**Server Action の競合制御**：playlist 編集 Action は操作種別（追加 / 削除 / 並び替え / title 更新）ごとに独立した Action とし、各 Action は `playlist_id` + `updated_at`（楽観ロック）を受け取る。`updated_at` が DB と一致しない場合は `409 Conflict` を返しクライアント側でリロードを促す。同一ストリームへの並行 reorder は UNIQUE 違反でクライアント再試行。title / description の保存は **blur イベント**で発火（debounce ではなく明示的フォーカス離脱時）。
 
 ### モバイル対応
 
-- D&D はデスクトップ専用。モバイルでは各エピソード行に **↑ / ↓ ボタン**を表示する
-- スティッキープレイヤーはモバイルでスクロール時に縮小表示（shrink on scroll）
+- D&D はデスクトップ専用。`@dnd-kit` は `pointer: coarse` 環境で **sensor を登録しない**（CSS 非表示ではなく sensor レベルで除外）。モバイルでは各エピソード行に **↑ / ↓ ボタン**を表示する
+- ↑↓ボタンの仕様：先頭行の ↑ と末尾行の ↓ は `disabled`。ボタン押下中（保存中）は両ボタンを `disabled`（連打による順序逆転防止）
+- スティッキープレイヤーのスクロール縮小（shrink on scroll）：縮小後の高さは `56px`（16:9 比率を維持せず固定高）、`top: 0` sticky。iOS Safari の `position: sticky` は `overflow: scroll` の親がいると効かないため、リスト部分は `overflow-y: auto` を持つラッパーを設ける
 - タブのタップ領域は最低 44px 確保
 
 ### ブックマーク表示制御
@@ -370,6 +412,7 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 
 - YouTube iframe に `rel=0` パラメータを付与し、再生終了後の関連動画表示をオフ
 - 最終エピソード再生終了後に「このプレイリストはここまでです」メッセージをオーバーレイ表示
+- 終了検知には YouTube IFrame API（`enablejsapi=1` + `origin` 指定）を使用。既存 `/stream/[id]` の単純 iframe 埋め込みとは別実装になる
 
 ### 再生済みマーク
 
