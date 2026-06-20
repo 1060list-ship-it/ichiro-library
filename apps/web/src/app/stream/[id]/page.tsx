@@ -19,7 +19,10 @@ const REASON_COLORS: Record<string, string> = {
 function HighlightList({ highlights, videoId, entities }: { highlights: Highlight[]; videoId: string; entities: Entity[] }) {
   return (
     <div className="bg-gray-900 rounded-lg overflow-hidden">
-      <p className="text-xs text-gray-500 font-medium px-4 pt-4 pb-2">盛り上がり</p>
+      <div className="flex items-baseline gap-2 px-4 pt-4 pb-2">
+        <p className="text-xs text-gray-500 font-medium">盛り上がり</p>
+        <p className="text-xs text-gray-600">※ 30秒前から再生</p>
+      </div>
       <div className="divide-y divide-gray-800">
         {highlights.map((h, i) => {
           const mm = Math.floor(h.start_sec / 60)

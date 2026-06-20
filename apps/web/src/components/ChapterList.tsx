@@ -16,12 +16,15 @@ function formatTime(sec: number) {
 export default function ChapterList({ chapters, videoId }: Props) {
   return (
     <div className="space-y-2">
-      <p className="text-xs text-gray-500 font-medium">チャプター</p>
+      <div className="flex items-baseline gap-2">
+        <p className="text-xs text-gray-500 font-medium">チャプター</p>
+        <p className="text-xs text-gray-600">※ 30秒前から再生</p>
+      </div>
       <div className="divide-y divide-gray-800 rounded-lg bg-gray-900 overflow-hidden">
         {chapters.map(ch => (
           <a
             key={ch.id}
-            href={`https://www.youtube.com/watch?v=${videoId}&t=${ch.start_sec}`}
+            href={`https://www.youtube.com/watch?v=${videoId}&t=${Math.max(0, ch.start_sec - 30)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex gap-3 px-4 py-3 hover:bg-gray-800 transition-colors"
