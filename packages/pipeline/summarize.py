@@ -30,11 +30,6 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
-_NO_THINKING_CONFIG = types.GenerateContentConfig(
-    thinking_config=types.ThinkingConfig(thinking_budget=0)
-)
-
-
 @retry(
     retry=retry_if_exception_type(Exception),
     wait=wait_exponential(multiplier=2, min=5, max=60),
@@ -42,7 +37,7 @@ _NO_THINKING_CONFIG = types.GenerateContentConfig(
     reraise=True,
 )
 def _generate_with_retry(model, prompt: str):
-    return model.models.generate_content(model=MODEL_NAME, contents=prompt, config=_NO_THINKING_CONFIG)
+    return model.models.generate_content(model=MODEL_NAME, contents=prompt)
 
 
 @lru_cache(maxsize=1)
