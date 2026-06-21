@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import type { AdminEditableStream, UpdateAdminStreamInput } from '../../actions'
-import { fetchAdminStream, updateAdminStream } from '../../actions'
+import type { AdminEditableStream, ScrutinyResult, UpdateAdminStreamInput } from '../../actions'
+import { enqueueJob, fetchAdminStream, scrutinizeStreamSummary, updateAdminStream } from '../../actions'
 import { useAdminAuth } from '../../useAdminAuth'
 
 type Props = {
@@ -25,6 +25,13 @@ type FormState = {
 }
 
 const KNOWN_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
+const SCRUTINY_CATEGORY_LABELS: Record<string, string> = {
+  song: '曲名',
+  person: '人名',
+  event: 'イベント',
+  venue: '会場',
+  other: 'その他',
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ja-JP', {
@@ -43,6 +50,10 @@ function formatStatus(status: string) {
 
 function toCsv(values: string[] | null) {
   return values?.join(', ') ?? ''
+}
+
+function formatScrutinyCategory(category: string) {
+  return SCRUTINY_CATEGORY_LABELS[category] ?? SCRUTINY_CATEGORY_LABELS.other
 }
 
 function toFormState(stream: AdminEditableStream): FormState {
@@ -98,6 +109,25 @@ export default function StreamEditorClient({ videoId }: Props) {
   const [pageError, setPageError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [scrutinyResult, setScrutinyResult] = useState<ScrutinyResult | null>(null)
+  const [scrutinyError, setScrutinyError] = useState('')
+  const [scrutinizing, setScrutinizing] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
+  const [reprocessMessage, setReprocessMessage] = useState('')
+
+  useEffect(() => {
+    if (!reprocessMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setReprocessMessage('')
+    }, 3000)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [reprocessMessage])
 
   useEffect(() => {
     if (!ready || !authenticated) {
@@ -216,6 +246,40 @@ export default function StreamEditorClient({ videoId }: Props) {
       setPageError('保存に失敗しました。')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleScrutinizeSummary() {
+    if (!stream) return
+
+    setScrutinizing(true)
+    setScrutinyResult(null)
+    setScrutinyError('')
+
+    try {
+      const result = await scrutinizeStreamSummary(stream.video_id)
+      setScrutinyResult(result)
+    } catch {
+      setScrutinyError('確認に失敗しました')
+    } finally {
+      setScrutinizing(false)
+    }
+  }
+
+  async function handleReprocessSummary() {
+    if (!stream) return
+
+    setReprocessing(true)
+    setReprocessMessage('')
+    setPageError('')
+
+    try {
+      await enqueueJob({ kind: 'reprocess_single', videoId: stream.video_id })
+      setReprocessMessage('再生成をキューに登録しました')
+    } catch {
+      setPageError('再生成のキュー登録に失敗しました。')
+    } finally {
+      setReprocessing(false)
     }
   }
 
@@ -339,10 +403,77 @@ export default function StreamEditorClient({ videoId }: Props) {
                 <textarea
                   value={form.summary}
                   onChange={(event) => setForm({ ...form, summary: event.target.value })}
-                  rows={8}
+                  rows={18}
                   className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-white outline-none transition focus:border-gray-600"
                 />
               </label>
+
+              {stream && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleScrutinizeSummary()}
+                      disabled={scrutinizing}
+                      className="rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm font-medium text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-500"
+                    >
+                      {scrutinizing ? '確認中...' : '固有名詞を確認'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleReprocessSummary()}
+                      disabled={reprocessing}
+                      className="rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm font-medium text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                    >
+                      {reprocessing ? '登録中...' : '要約を再生成'}
+                    </button>
+                  </div>
+                  {reprocessMessage && <p className="text-sm text-emerald-400">{reprocessMessage}</p>}
+
+                  {(scrutinyResult || scrutinyError) && (
+                    <div className="rounded-xl border border-gray-800 bg-gray-950/80 p-4">
+                      <div className="space-y-3">
+                        <div>
+                          <h2 className="text-sm font-medium text-white">固有名詞の確認結果</h2>
+                          <p className="mt-1 text-xs text-gray-500">要約文に含まれる名前を辞書と照合しています。</p>
+                        </div>
+
+                        {scrutinyError ? (
+                          <p className="text-sm text-red-400">{scrutinyError}</p>
+                        ) : scrutinyResult && scrutinyResult.entities.length > 0 ? (
+                          <ul className="space-y-2">
+                            {scrutinyResult.entities.map((entity) => (
+                              <li
+                                key={`${entity.status}:${entity.category}:${entity.name}`}
+                                className={entity.status === 'found' ? 'text-sm text-emerald-400' : 'text-sm text-yellow-300'}
+                              >
+                                {entity.status === 'found' ? '✓ ' : '⚠ '}
+                                {entity.name}
+                                <span className="ml-1 text-xs text-gray-500">
+                                  （{formatScrutinyCategory(entity.category)}）
+                                </span>
+                                {entity.status === 'not_found' && (
+                                  <>
+                                    <span>（未登録）</span>
+                                    <Link
+                                      href={`/admin/entity/new?name=${encodeURIComponent(entity.name)}`}
+                                      className="ml-2 text-xs text-gray-400 underline hover:text-white"
+                                    >
+                                      登録
+                                    </Link>
+                                  </>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-gray-400">固有名詞は検出されませんでした</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <TextField
                 label="タグ"

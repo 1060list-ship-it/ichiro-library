@@ -41,26 +41,28 @@ STORAGE_BUCKET = "magazine-covers"
 COVER_PROMPT_TEMPLATE = """You are an art director for a Japanese weekly music editorial platform called "いっくん追いかけマガジン".
 Generate a weekly vertical editorial image for a UI hero slot; all typography will be composited externally after generation.
 
-Output ONLY the English image prompt text (max 80 words). No explanations, no labels, no code blocks, no Japanese.
+Output ONLY the English image prompt text (max 100 words). No explanations, no labels, no code blocks, no Japanese.
 
 FIXED STYLE (always include ALL of these in your output prompt):
 - vertical Japanese editorial artwork, 2:3 portrait format, pure visual illustration — no text zones
 - upper 35% of the composition must be a minimal, nearly-empty tonal field (dark sky, fog, blank paper, or flat wash only) — no detailed elements, figures, or patterns in that zone; this area will be covered by title text
 - two-tone or near-monochrome graphic style: black ink, charcoal, warm white paper, one muted cool gray/blue accent only
 - quiet, intellectual, urban, art-book quality — not a flyer, not a YouTube thumbnail, not a product photo
-- cover concept must come from this week's actual topics, mood, songs, and motifs
+- cover concept MUST be visually inspired by THIS WEEK'S specific content below — never use generic defaults
 - do not make a realistic face or likeness; if a person appears, use a mature 45-year-old presence only as back-view silhouette, side-profile shadow, hand, glasses, microphone, or coat
 - the human presence must feel middle-aged, grounded, slightly tired: heavy black coat, lowered shoulders, calm adult stillness; never youthful or idol-like
 - avoid saturated colors, crowded layouts, direct photo likeness, young faces
 
-THIS WEEK'S CONTENT:
+THIS WEEK'S CONTENT (derive ONE strong visual metaphor from these — ignore generic motifs):
 - Headline: {headline}
-- Topics: {topics}
+- Weekly mood: {intro_excerpt}
+- Topics covered: {topics}
 - Songs featured: {songs}
-- Mood distribution: {mood}
-- Key motifs to consider: water, fish, night cityscape, music, microphone, guitar
+- Guests this week: {guests}
+- Memorable quotes: {key_quotes}
+- Emotional tone: {mood}
 
-Output the prompt now."""
+Choose a single concrete visual scene or object that best captures the specific texture of this week. Do not default to fish, water, or microphone unless they genuinely appear in the content above. Output the prompt now."""
 
 MAGAZINE_PROMPT = """あなたは「いっくん追いかけマガジン」の編集者です。
 山口一郎（サカナクション）のYouTubeライブ配信を追えないファンのために、1週間分の配信内容をマガジン形式でまとめてください。
@@ -359,10 +361,23 @@ def generate_cover_image(
             for s in songs_raw
         )
 
+        guests_list = content.get("guests", []) or []
+        guests = ", ".join(guests_list) if guests_list else "none"
+
+        key_quotes = "; ".join(
+            f'"{h["quote"]}"' for h in all_highlights[:3] if h.get("quote")
+        ) or "none"
+
+        intro_text = content.get("intro", "") or ""
+        intro_excerpt = intro_text[:180].rstrip("。、") + ("…" if len(intro_text) > 180 else "")
+
         cover_prompt_request = COVER_PROMPT_TEMPLATE.format(
             headline=content.get("headline", ""),
+            intro_excerpt=intro_excerpt,
             topics=topics,
             songs=songs,
+            guests=guests,
+            key_quotes=key_quotes,
             mood=mood,
         )
 

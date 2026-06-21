@@ -6,6 +6,8 @@ import os
 import re
 import json
 import logging
+from collections import OrderedDict
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 from google import genai
@@ -16,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "v3"
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.txt"
+SONG_CATALOG_PATH = Path(__file__).parent / "prompts" / "song_catalog.txt"
+SONGS_SQL_PATH = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "013_songs.sql"
 MODEL_NAME = "gemini-2.5-flash"
 
 
@@ -41,6 +45,26 @@ def _generate_with_retry(model, prompt: str):
     return model.models.generate_content(model=MODEL_NAME, contents=prompt, config=_NO_THINKING_CONFIG)
 
 
+@lru_cache(maxsize=1)
+def _load_song_catalog_text() -> str:
+    if SONG_CATALOG_PATH.exists():
+        return SONG_CATALOG_PATH.read_text(encoding="utf-8").strip()
+
+    sql = SONGS_SQL_PATH.read_text(encoding="utf-8")
+    rows = re.findall(r"^\s*\('([^']*)',\s*'([^']*)'", sql, flags=re.MULTILINE)
+    if not rows:
+        raise ValueError(f"songs マスタを解析できませんでした: {SONGS_SQL_PATH}")
+
+    albums: OrderedDict[str, list[str]] = OrderedDict()
+    for title, album in rows:
+        albums.setdefault(album, []).append(title)
+
+    return "\n\n".join(
+        f"{album}: {', '.join(titles)}"
+        for album, titles in albums.items()
+    )
+
+
 def summarize(transcript_text: str, model=None) -> Optional[dict]:
     """
     字幕テキストを受け取り、構造化データ（dict）を返す。
@@ -54,7 +78,11 @@ def summarize(transcript_text: str, model=None) -> Optional[dict]:
         model = get_gemini_client()
 
     prompt_template = PROMPT_PATH.read_text(encoding="utf-8")
-    prompt = prompt_template.replace("{transcript}", transcript_text)
+    prompt = (
+        prompt_template
+        .replace("{song_catalog}", _load_song_catalog_text())
+        .replace("{transcript}", transcript_text)
+    )
 
     try:
         response = _generate_with_retry(model, prompt)

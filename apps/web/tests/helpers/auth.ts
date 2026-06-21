@@ -70,7 +70,7 @@ function createCookieStore() {
       return Array.from(cookies.values()).map(({ name, value, options }) => ({
         name,
         value,
-        url: APP_BASE_URL,
+        domain: 'localhost',
         path: options?.path ?? '/',
         httpOnly: options?.httpOnly ?? false,
         secure: options?.secure ?? APP_BASE_URL.startsWith('https://'),

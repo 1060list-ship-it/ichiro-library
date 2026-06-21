@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
+import { requireRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Stream } from '@/lib/types'
 
@@ -138,14 +139,6 @@ function getAdminCookieValue() {
     .digest('hex')
 }
 
-async function requireAdminSession() {
-  const cookieStore = await cookies()
-  const current = cookieStore.get(ADMIN_COOKIE_NAME)?.value
-
-  if (current !== getAdminCookieValue()) {
-    throw new Error('Unauthorized')
-  }
-}
 
 function normalizeCsv(value: string) {
   const items = value
@@ -200,7 +193,7 @@ export async function clearAdminSession() {
 }
 
 export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const [
     totalResult,
@@ -242,7 +235,7 @@ export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
 }
 
 export async function searchAdminStreams(input: AdminStreamSearchInput): Promise<AdminListStream[]> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const normalized = input.query?.trim() ?? ''
   const startDate = input.startDate?.trim() ?? ''
@@ -279,7 +272,7 @@ export async function searchAdminStreams(input: AdminStreamSearchInput): Promise
 }
 
 export async function fetchAdminStreamsPage(offset = 0, limit = 20): Promise<AdminStreamPage> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const { data, error } = await supabaseAdmin
     .from('streams')
@@ -300,7 +293,7 @@ export async function fetchAdminStreamsPage(offset = 0, limit = 20): Promise<Adm
 }
 
 export async function enqueueJob(input: EnqueueJobInput): Promise<PipelineJob> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   let payload: Record<string, unknown> | null = null
   if (input.kind === 'fetch_new') {
@@ -339,7 +332,7 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<PipelineJob> {
 }
 
 export async function fetchRecentJobs(limit = 10): Promise<PipelineJob[]> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const { data, error } = await (supabaseAdmin as never as {
     from: (table: 'pipeline_jobs') => {
@@ -363,7 +356,7 @@ export async function fetchRecentJobs(limit = 10): Promise<PipelineJob[]> {
 }
 
 export async function setAdminStreamReviewed(videoId: string, isReviewed: boolean): Promise<AdminListStream> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const { data, error } = await supabaseAdmin
     .from('streams')
@@ -383,7 +376,7 @@ export async function setAdminStreamReviewed(videoId: string, isReviewed: boolea
 }
 
 export async function fetchAdminStream(videoId: string): Promise<AdminEditableStream | null> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const withLiveViewing = await supabaseAdmin
     .from('streams')
@@ -415,7 +408,7 @@ export async function fetchAdminStream(videoId: string): Promise<AdminEditableSt
 }
 
 export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<AdminEditableStream> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const updates: StreamUpdate = {
     summary: input.summary.trim() || null,
@@ -503,8 +496,76 @@ export type UpsertAdminEntityInput = {
   sortOrder: string
 }
 
+export type SuggestEntityResult = {
+  slug: string
+  category: string
+  role: string
+  description: string
+  matchNames: string[]
+  relatedWork: string
+  externalUrl: string
+}
+
+const ENTITY_CATEGORIES = ['family', 'celebrity', 'remixer', 'team', 'craftsman', 'product', 'project'] as const
+
+function createEmptySuggestEntityResult(): SuggestEntityResult {
+  return {
+    slug: '',
+    category: '',
+    role: '',
+    description: '',
+    matchNames: [],
+    relatedWork: '',
+    externalUrl: '',
+  }
+}
+
+function readTrimmedString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function isEntityCategory(value: string): value is (typeof ENTITY_CATEGORIES)[number] {
+  return (ENTITY_CATEGORIES as readonly string[]).includes(value)
+}
+
+function parseSuggestEntityResult(content: string): SuggestEntityResult | null {
+  const normalized = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+
+  try {
+    const parsed = JSON.parse(normalized)
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null
+    }
+
+    const matchNames = Array.isArray(parsed.matchNames)
+      ? parsed.matchNames.flatMap((value: unknown) => {
+        const normalizedValue = readTrimmedString(value)
+        return normalizedValue ? [normalizedValue] : []
+      })
+      : []
+
+    const category = readTrimmedString(parsed.category)
+
+    return {
+      slug: readTrimmedString(parsed.slug),
+      category: isEntityCategory(category) ? category : 'celebrity',
+      role: readTrimmedString(parsed.role),
+      description: readTrimmedString(parsed.description),
+      matchNames: [...new Set(matchNames)] as string[],
+      relatedWork: readTrimmedString(parsed.relatedWork),
+      externalUrl: readTrimmedString(parsed.externalUrl),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function fetchAdminEntities(): Promise<AdminEntity[]> {
-  await requireAdminSession()
+  await requireRole(['admin'])
   const { data, error } = await supabaseAdmin
     .from('entities')
     .select('*')
@@ -515,7 +576,7 @@ export async function fetchAdminEntities(): Promise<AdminEntity[]> {
 }
 
 export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> {
-  await requireAdminSession()
+  await requireRole(['admin'])
   const { data, error } = await supabaseAdmin
     .from('entities')
     .select('*')
@@ -526,7 +587,7 @@ export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> 
 }
 
 export async function fetchAdminEntityStreams(entityId: string): Promise<AdminEntityStream[]> {
-  await requireAdminSession()
+  await requireRole(['admin'])
   const { data: relations, error: relErr } = await supabaseAdmin
     .from('stream_entities')
     .select('stream_id')
@@ -545,7 +606,7 @@ export async function fetchAdminEntityStreams(entityId: string): Promise<AdminEn
 }
 
 export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<AdminEntity> {
-  await requireAdminSession()
+  await requireRole(['admin'])
   const payload = {
     name: input.name.trim(),
     slug: input.slug.trim(),
@@ -579,15 +640,85 @@ export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<
 }
 
 export async function deleteAdminEntity(id: string): Promise<void> {
-  await requireAdminSession()
+  await requireRole(['admin'])
   const { error } = await supabaseAdmin.from('entities').delete().eq('id', id)
   if (error) throw error
   revalidatePath('/admin/entity')
   revalidatePath('/entity')
 }
 
+export async function suggestEntityFields(name: string): Promise<SuggestEntityResult> {
+  await requireRole(['admin'])
+
+  const normalizedName = name.trim()
+  if (!normalizedName) {
+    return createEmptySuggestEntityResult()
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) {
+    return createEmptySuggestEntityResult()
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはサカナクション・山口一郎の音楽活動に詳しいアシスタントです。JSON以外は出力しないでください。',
+          },
+          {
+            role: 'user',
+            content: `「${normalizedName}」というエンティティについて以下フィールドを推測してJSONで返してください。
+
+カテゴリ候補（いずれか1つ）:
+- family: 家族・地元関係者
+- celebrity: 交友・影響を受けたアーティスト
+- remixer: リミキサー
+- team: チームメンバー
+- craftsman: 職人・技術者
+- product: コラボ製品
+- project: プロジェクト
+
+出力形式（JSONのみ）:
+{
+  "slug": "url-safe（ローマ字またはASCII、ハイフン区切り）",
+  "category": "上記カテゴリのいずれか",
+  "role": "具体的な役割・肩書き（例：ベーシスト）",
+  "description": "日本語の説明文（2〜3文）",
+  "matchNames": ["表記ゆれ・別名"],
+  "relatedWork": "関連作品（あれば）",
+  "externalUrl": "公式URL（あれば、なければ空文字）"
+}
+不明なフィールドは空文字または空配列にしてください。`,
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      return createEmptySuggestEntityResult()
+    }
+
+    const payload = await response.json() as OpenAIChatCompletionResponse
+    const content = extractScrutinyContent(payload.choices?.[0]?.message?.content)
+
+    return parseSuggestEntityResult(content) ?? createEmptySuggestEntityResult()
+  } catch {
+    return createEmptySuggestEntityResult()
+  }
+}
+
 export async function markStreamReviewed(videoId: string): Promise<AdminEditableStream> {
-  await requireAdminSession()
+  await requireRole(['admin'])
 
   const updates: StreamUpdate = { is_reviewed: true }
 
@@ -623,4 +754,172 @@ export async function markStreamReviewed(videoId: string): Promise<AdminEditable
   revalidatePath(`/admin/stream/${videoId}`)
 
   return data
+}
+
+export type ScrutinyEntity = {
+  name: string
+  category: string
+  status: 'found' | 'not_found'
+}
+
+export type ScrutinyResult = {
+  entities: ScrutinyEntity[]
+}
+
+type OpenAIChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }> | null
+    } | null
+  }>
+}
+
+type RawScrutinyEntity = {
+  name?: unknown
+  category?: unknown
+}
+
+function extractScrutinyContent(content: string | Array<{ type?: string; text?: string }> | null | undefined) {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
+      .join('')
+  }
+
+  return ''
+}
+
+function parseScrutinyEntities(content: string) {
+  const normalized = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+
+  try {
+    const parsed = JSON.parse(normalized)
+
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') {
+        return []
+      }
+
+      const { name, category } = item as RawScrutinyEntity
+      if (typeof name !== 'string' || typeof category !== 'string') {
+        return []
+      }
+
+      const trimmedName = name.trim()
+      const trimmedCategory = category.trim()
+
+      if (!trimmedName || !trimmedCategory) {
+        return []
+      }
+
+      return [{ name: trimmedName, category: trimmedCategory }]
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function scrutinizeStreamSummary(videoId: string): Promise<ScrutinyResult> {
+  await requireRole(['admin'])
+
+  const { data, error } = await (supabaseAdmin as never as {
+    from: (table: 'streams') => {
+      select: (columns: 'summary') => {
+        eq: (column: 'video_id', value: string) => {
+          maybeSingle: () => Promise<{ data: Pick<Stream, 'summary'> | null; error: unknown }>
+        }
+      }
+    }
+  })
+    .from('streams')
+    .select('summary')
+    .eq('video_id', videoId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  const summary = data?.summary?.trim() ?? ''
+  if (!summary) {
+    return { entities: [] }
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) {
+    return { entities: [] }
+  }
+
+  let parsedEntities: Array<{ name: string; category: string }> = []
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはNERの専門家です。JSON配列のみ出力してください。',
+          },
+          {
+            role: 'user',
+            content: `以下はサカナクション 山口一郎のライブ配信要約です。固有名詞（曲名・人名・アーティスト名・イベント名・会場名）を全て抽出してJSON配列で返してください。\n\n要約:\n${summary}\n\n出力形式（JSONのみ）:\n[{"name": "固有名詞", "category": "song|person|event|venue|other"}]`,
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      return { entities: [] }
+    }
+
+    const payload = await response.json() as OpenAIChatCompletionResponse
+    const content = extractScrutinyContent(payload.choices?.[0]?.message?.content)
+    parsedEntities = parseScrutinyEntities(content)
+  } catch {
+    return { entities: [] }
+  }
+
+  if (parsedEntities.length === 0) {
+    return { entities: [] }
+  }
+
+  const entities = await Promise.all(
+    parsedEntities.map(async (entity): Promise<ScrutinyEntity> => {
+      const { data: matched, error: matchError } = await supabaseAdmin
+        .from('entities')
+        .select('name')
+        .ilike('name', entity.name)
+        .limit(1)
+
+      if (matchError) {
+        throw matchError
+      }
+
+      return {
+        name: entity.name,
+        category: entity.category,
+        status: (matched?.length ?? 0) > 0 ? 'found' : 'not_found',
+      }
+    })
+  )
+
+  return { entities }
 }

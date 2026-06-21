@@ -88,11 +88,14 @@ def _fetch_video_details(youtube, video_ids: list[str]) -> list[dict]:
             except Exception:
                 pass
 
-        actual_start = live.get("actualStartTime") or snippet.get("publishedAt")
+        # actualStartTime があるものだけをライブ配信とみなす。
+        # publishedAt へのフォールバックを許すとショート動画が混入する。
+        actual_start = live.get("actualStartTime")
+        date_source = actual_start or snippet.get("publishedAt")
         stream_date = None
-        if actual_start:
+        if date_source:
             try:
-                stream_date = datetime.fromisoformat(actual_start.replace("Z", "+00:00")).date().isoformat()
+                stream_date = datetime.fromisoformat(date_source.replace("Z", "+00:00")).date().isoformat()
             except Exception:
                 pass
 
@@ -101,6 +104,7 @@ def _fetch_video_details(youtube, video_ids: list[str]) -> list[dict]:
             "title": snippet.get("title", ""),
             "stream_date": stream_date,
             "started_at": actual_start,
+            "is_live": bool(actual_start),
             "duration_min": duration_min,
             "view_count": int(stats.get("viewCount", 0)) or None,
             "like_count": int(stats.get("likeCount", 0)) or None,
@@ -146,8 +150,7 @@ def fetch_all_live_archives_via_playlist(youtube, channel_id: str) -> list[dict]
         batch = all_video_ids[i:i + 50]
         details = _fetch_video_details(youtube, batch)
         for v in details:
-            # liveStreamingDetails が存在する = ライブ配信アーカイブ
-            if v.get("started_at"):
+            if v.get("is_live"):
                 live_videos.append(v)
 
     # 古い順に並べ替え

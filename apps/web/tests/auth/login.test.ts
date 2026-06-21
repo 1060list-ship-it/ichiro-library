@@ -29,7 +29,7 @@ test.describe('login', () => {
       returnQuery: 'return=/member',
     })
 
-    await page.waitForURL('**/member')
+    await page.waitForURL((url) => url.pathname === '/member')
     expect(new URL(page.url()).pathname).toBe('/member')
   })
 
@@ -71,7 +71,7 @@ test.describe('login', () => {
       returnQuery: 'return=/member',
     })
 
-    await page.waitForURL('**/member')
+    await page.waitForURL((url) => url.pathname === '/member')
     expect(new URL(page.url()).pathname).toBe('/member')
   })
 })

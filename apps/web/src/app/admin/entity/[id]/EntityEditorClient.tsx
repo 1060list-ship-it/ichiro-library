@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useRef } from 'react'
 import type { AdminEntity, AdminEntityStream } from '../../actions'
 import { deleteAdminEntity, upsertAdminEntity } from '../../actions'
+import { suggestEntityFields, type SuggestEntityResult } from '@/app/admin/actions'
 
 const CATEGORIES = [
   { value: 'family',    label: '家族・地元' },
@@ -19,6 +20,7 @@ const CATEGORIES = [
 type Props = {
   entity: AdminEntity | null
   streams: AdminEntityStream[]
+  prefillName?: string
 }
 
 function formatDate(value: string) {
@@ -27,11 +29,11 @@ function formatDate(value: string) {
   })
 }
 
-export default function EntityEditorClient({ entity, streams }: Props) {
+export default function EntityEditorClient({ entity, streams, prefillName }: Props) {
   const router = useRouter()
   const aliasInputRef = useRef<HTMLInputElement>(null)
 
-  const [name, setName] = useState(entity?.name ?? '')
+  const [name, setName] = useState(entity?.name ?? prefillName ?? '')
   const [slug, setSlug] = useState(entity?.slug ?? '')
   const [category, setCategory] = useState(entity?.category ?? 'celebrity')
   const [role, setRole] = useState(entity?.role ?? '')
@@ -43,6 +45,7 @@ export default function EntityEditorClient({ entity, streams }: Props) {
   const [sortOrder, setSortOrder] = useState(entity?.sort_order?.toString() ?? '')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
 
   function addAlias() {
@@ -56,6 +59,25 @@ export default function EntityEditorClient({ entity, streams }: Props) {
 
   function removeAlias(alias: string) {
     setMatchNames(prev => prev.filter(n => n !== alias))
+  }
+
+  async function handleSuggest() {
+    if (!name.trim()) return
+    setSuggesting(true)
+    try {
+      const result: SuggestEntityResult = await suggestEntityFields(name.trim())
+      if (result.slug) setSlug(result.slug)
+      if (result.category) setCategory(result.category)
+      if (result.role) setRole(result.role)
+      if (result.description) setDescription(result.description)
+      if (result.matchNames.length > 0) setMatchNames(result.matchNames)
+      if (result.relatedWork) setRelatedWork(result.relatedWork)
+      if (result.externalUrl) setExternalUrl(result.externalUrl)
+    } catch {
+      // silent fail
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   async function handleSave() {
@@ -136,6 +158,14 @@ export default function EntityEditorClient({ entity, streams }: Props) {
               <span className={labelTextClass}>名前 *</span>
               <input className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="浜田省吾" />
             </label>
+            <button
+              type="button"
+              onClick={handleSuggest}
+              disabled={suggesting || !name.trim()}
+              className="mt-1 text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-40"
+            >
+              {suggesting ? 'AI 調査中…' : 'AI で自動入力'}
+            </button>
             <label className={labelClass}>
               <span className={labelTextClass}>スラッグ *</span>
               <input className={inputClass} value={slug} onChange={e => setSlug(e.target.value)} placeholder="hamada-shogo" />
