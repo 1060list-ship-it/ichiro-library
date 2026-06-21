@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { requireRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { Database, Stream } from '@/lib/types'
+import type { Database, Highlight, Stream } from '@/lib/types'
 
 const ADMIN_COOKIE_NAME = 'ichiro-library-admin'
 
@@ -39,8 +39,18 @@ export type AdminEditableStream = Pick<
   | 'has_live_singing'
   | 'has_live_viewing'
   | 'talk_topics'
+  | 'highlights'
 > & {
   supportsLiveViewing: boolean
+}
+
+export type AdminChapter = {
+  id: string
+  start_sec: number
+  end_sec: number | null
+  title: string
+  summary: string | null
+  sort_order: number
 }
 
 export type UpdateAdminStreamInput = {
@@ -53,7 +63,13 @@ export type UpdateAdminStreamInput = {
   hasLiveSinging: boolean
   hasLiveViewing: boolean
   talkTopics: string
+  highlights: Highlight[]
   isReviewed: boolean
+}
+
+export type SaveAdminChaptersInput = {
+  videoId: string
+  chapters: Omit<AdminChapter, 'id' | 'sort_order'>[]
 }
 
 export type AdminStreamSearchInput = {
@@ -87,6 +103,8 @@ export type PipelineJob = {
 }
 
 type StreamUpdate = Database['public']['Tables']['streams']['Update']
+type ChapterInsert = Database['public']['Tables']['chapters']['Insert']
+type AdminStreamUpdate = StreamUpdate & { highlights?: Highlight[] | null }
 
 const ADMIN_STREAM_SELECT_BASE = `
   id,
@@ -103,6 +121,7 @@ const ADMIN_STREAM_SELECT_BASE = `
   guests,
   songs,
   has_live_singing,
+  highlights,
   talk_topics
 `
 
@@ -147,6 +166,23 @@ function normalizeCsv(value: string) {
     .filter(Boolean)
 
   return items.length > 0 ? items : null
+}
+
+async function findStreamIdByVideoId(videoId: string): Promise<string | null> {
+  const streamResult = await supabaseAdmin
+    .from('streams')
+    .select('id')
+    .eq('video_id', videoId)
+    .maybeSingle()
+
+  const data = streamResult.data as Pick<Stream, 'id'> | null
+  const { error } = streamResult
+
+  if (error) {
+    throw error
+  }
+
+  return data?.id ?? null
 }
 
 function toEditableStream(stream: AdminEditableStream): AdminEditableStream {
@@ -455,16 +491,39 @@ export async function fetchAdminStream(videoId: string): Promise<AdminEditableSt
   return fallback.data ? toEditableStreamWithoutLiveViewing(fallback.data) : null
 }
 
+export async function fetchAdminChapters(videoId: string): Promise<AdminChapter[]> {
+  await requireRole(['admin'])
+
+  const streamId = await findStreamIdByVideoId(videoId)
+
+  if (!streamId) {
+    return []
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('chapters')
+    .select('id, start_sec, end_sec, title, summary, sort_order')
+    .eq('stream_id', streamId)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return (data ?? []) as AdminChapter[]
+}
+
 export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<AdminEditableStream> {
   await requireRole(['admin'])
 
-  const updates: StreamUpdate = {
+  const updates: AdminStreamUpdate = {
     summary: input.summary.trim() || null,
     tags: normalizeCsv(input.tags),
     corner_names: normalizeCsv(input.cornerNames),
     guests: normalizeCsv(input.guests),
     songs: normalizeCsv(input.songs),
     has_live_singing: input.hasLiveSinging,
+    highlights: input.highlights.length > 0 ? input.highlights : null,
     has_live_viewing: input.hasLiveViewing,
     talk_topics: normalizeCsv(input.talkTopics),
     is_reviewed: input.isReviewed,
@@ -505,6 +564,48 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
   revalidatePath(`/admin/stream/${input.videoId}`)
 
   return data
+}
+
+export async function saveAdminChapters(input: SaveAdminChaptersInput): Promise<void> {
+  await requireRole(['admin'])
+
+  const streamId = await findStreamIdByVideoId(input.videoId)
+
+  if (!streamId) {
+    throw new Error(`stream not found: ${input.videoId}`)
+  }
+
+  const deleteResult = await supabaseAdmin
+    .from('chapters')
+    .delete()
+    .eq('stream_id', streamId)
+
+  if (deleteResult.error) {
+    throw deleteResult.error
+  }
+
+  if (input.chapters.length > 0) {
+    const rows: ChapterInsert[] = input.chapters.map((chapter, index) => ({
+      stream_id: streamId,
+      start_sec: chapter.start_sec,
+      end_sec: chapter.end_sec,
+      title: chapter.title.trim(),
+      summary: chapter.summary?.trim() || null,
+      transcript_segment: null,
+      sort_order: index,
+    }))
+
+    const { error } = await supabaseAdmin
+      .from('chapters' as never)
+      .insert(rows as never)
+
+    if (error) {
+      throw error
+    }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath(`/admin/stream/${input.videoId}`)
 }
 
 // ── Entity management ────────────────────────────────────────────────────────

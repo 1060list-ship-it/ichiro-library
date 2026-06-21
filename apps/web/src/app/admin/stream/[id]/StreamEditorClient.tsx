@@ -3,8 +3,21 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import type { AdminEditableStream, ScrutinyResult, UpdateAdminStreamInput } from '../../actions'
-import { enqueueJob, fetchAdminStream, scrutinizeStreamSummary, updateAdminStream } from '../../actions'
+import type { Highlight } from '@/lib/types'
+import type {
+  AdminChapter,
+  AdminEditableStream,
+  ScrutinyResult,
+  UpdateAdminStreamInput,
+} from '../../actions'
+import {
+  enqueueJob,
+  fetchAdminChapters,
+  fetchAdminStream,
+  saveAdminChapters,
+  scrutinizeStreamSummary,
+  updateAdminStream,
+} from '../../actions'
 import { useAdminAuth } from '../../useAdminAuth'
 
 type Props = {
@@ -21,10 +34,20 @@ type FormState = {
   hasLiveViewing: boolean
   supportsLiveViewing: boolean
   talkTopics: string
+  highlights: Highlight[]
   isReviewed: boolean
 }
 
+type EditableChapter = {
+  id: string
+  start_sec: number | null
+  end_sec: number | null
+  title: string
+  summary: string
+}
+
 const KNOWN_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
+const HIGHLIGHT_REASONS: Highlight['reason'][] = ['笑い', '名言', '感動', '驚き', '神回']
 const SCRUTINY_CATEGORY_LABELS: Record<string, string> = {
   song: '曲名',
   person: '人名',
@@ -67,8 +90,43 @@ function toFormState(stream: AdminEditableStream): FormState {
     hasLiveViewing: Boolean(stream.has_live_viewing),
     supportsLiveViewing: stream.supportsLiveViewing,
     talkTopics: toCsv(stream.talk_topics),
+    highlights: stream.highlights ?? [],
     isReviewed: stream.is_reviewed,
   }
+}
+
+function createChapterId() {
+  return globalThis.crypto?.randomUUID?.() ?? `chapter-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function toEditableChapter(chapter: AdminChapter): EditableChapter {
+  return {
+    id: chapter.id,
+    start_sec: chapter.start_sec,
+    end_sec: chapter.end_sec,
+    title: chapter.title,
+    summary: chapter.summary ?? '',
+  }
+}
+
+function createEmptyChapter(): EditableChapter {
+  return {
+    id: createChapterId(),
+    start_sec: 0,
+    end_sec: null,
+    title: '',
+    summary: '',
+  }
+}
+
+function parseChapterNumber(value: string) {
+  if (value.trim() === '') {
+    return null
+  }
+
+  const parsed = Number(value)
+
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function TextField({
@@ -104,11 +162,15 @@ export default function StreamEditorClient({ videoId }: Props) {
   const [password, setPassword] = useState('')
   const [stream, setStream] = useState<AdminEditableStream | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
+  const [chapters, setChapters] = useState<EditableChapter[]>([])
   const [customCornerName, setCustomCornerName] = useState('')
   const [loading, setLoading] = useState(false)
   const [pageError, setPageError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [chapterError, setChapterError] = useState('')
+  const [chapterSaveMessage, setChapterSaveMessage] = useState('')
+  const [savingChapters, setSavingChapters] = useState(false)
   const [scrutinyResult, setScrutinyResult] = useState<ScrutinyResult | null>(null)
   const [scrutinyError, setScrutinyError] = useState('')
   const [scrutinizing, setScrutinizing] = useState(false)
@@ -139,11 +201,24 @@ export default function StreamEditorClient({ videoId }: Props) {
     async function load() {
       setLoading(true)
       setPageError('')
+      setChapterError('')
 
       try {
-        const data = await fetchAdminStream(videoId)
+        const [streamResult, chapterResult] = await Promise.allSettled([
+          fetchAdminStream(videoId),
+          fetchAdminChapters(videoId),
+        ])
 
-        if (!active) return
+        if (!active) {
+          return
+        }
+
+        if (streamResult.status === 'rejected') {
+          setPageError('配信データの取得に失敗しました。')
+          return
+        }
+
+        const data = streamResult.value
 
         if (!data) {
           setPageError('対象の配信が見つかりません。')
@@ -152,9 +227,12 @@ export default function StreamEditorClient({ videoId }: Props) {
 
         setStream(data)
         setForm(toFormState(data))
-      } catch {
-        if (active) {
-          setPageError('配信データの取得に失敗しました。')
+
+        if (chapterResult.status === 'fulfilled') {
+          setChapters(chapterResult.value.map(toEditableChapter))
+        } else {
+          setChapters([])
+          setChapterError('チャプターデータの取得に失敗しました。')
         }
       } finally {
         if (active) {
@@ -212,6 +290,56 @@ export default function StreamEditorClient({ videoId }: Props) {
     setCustomCornerName('')
   }
 
+  function updateHighlight(index: number, nextValue: Highlight) {
+    if (!form) return
+
+    setForm({
+      ...form,
+      highlights: form.highlights.map((highlight, highlightIndex) =>
+        highlightIndex === index ? nextValue : highlight
+      ),
+    })
+  }
+
+  function removeHighlight(index: number) {
+    if (!form) return
+
+    setForm({
+      ...form,
+      highlights: form.highlights.filter((_, highlightIndex) => highlightIndex !== index),
+    })
+  }
+
+  function addHighlight() {
+    if (!form) return
+
+    setForm({
+      ...form,
+      highlights: [
+        ...form.highlights,
+        {
+          start_sec: 0,
+          quote: '',
+          reason: '笑い',
+        },
+      ],
+    })
+  }
+
+  function updateChapter(index: number, nextValue: EditableChapter) {
+    setChapters((current) =>
+      current.map((chapter, chapterIndex) => (chapterIndex === index ? nextValue : chapter))
+    )
+  }
+
+  function removeChapter(index: number) {
+    setChapters((current) => current.filter((_, chapterIndex) => chapterIndex !== index))
+  }
+
+  function addChapter() {
+    setChapters((current) => [...current, createEmptyChapter()])
+  }
+
   async function handleSave(returnToList = false) {
     if (!form) return
 
@@ -229,6 +357,7 @@ export default function StreamEditorClient({ videoId }: Props) {
       hasLiveSinging: form.hasLiveSinging,
       hasLiveViewing: form.supportsLiveViewing ? form.hasLiveViewing : false,
       talkTopics: form.talkTopics,
+      highlights: form.highlights,
       isReviewed: form.isReviewed,
     }
 
@@ -246,6 +375,44 @@ export default function StreamEditorClient({ videoId }: Props) {
       setPageError('保存に失敗しました。')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveChapters() {
+    setSavingChapters(true)
+    setChapterError('')
+    setChapterSaveMessage('')
+
+    try {
+      const normalizedChapters = chapters.map((chapter) => {
+        if (chapter.start_sec === null) {
+          throw new Error('開始秒を入力してください。')
+        }
+
+        if (chapter.title.trim().length === 0) {
+          throw new Error('タイトルを入力してください。')
+        }
+
+        return {
+          start_sec: chapter.start_sec,
+          end_sec: chapter.end_sec,
+          title: chapter.title.trim(),
+          summary: chapter.summary.trim() || null,
+        }
+      })
+
+      await saveAdminChapters({
+        videoId,
+        chapters: normalizedChapters,
+      })
+
+      const latestChapters = await fetchAdminChapters(videoId)
+      setChapters(latestChapters.map(toEditableChapter))
+      setChapterSaveMessage('チャプターを保存しました。')
+    } catch (error) {
+      setChapterError(error instanceof Error ? error.message : 'チャプターの保存に失敗しました。')
+    } finally {
+      setSavingChapters(false)
     }
   }
 
@@ -639,6 +806,213 @@ export default function StreamEditorClient({ videoId }: Props) {
                 description="配信で話していた主なテーマをカンマ区切りで入力します。"
                 placeholder="例: ツアー制作, 機材, 作曲"
               />
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-300">チャプター</p>
+                  <p className="text-xs text-gray-500">開始秒・終了秒・タイトル・要約を配信内容に合わせて調整します。</p>
+                </div>
+
+                <div className="space-y-3">
+                  {chapters.map((chapter, index) => (
+                    <div
+                      key={chapter.id}
+                      className="space-y-3 rounded-xl border border-gray-800 bg-gray-950 p-4"
+                    >
+                      <div className="grid gap-3 md:grid-cols-[120px_120px_1fr_auto]">
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">開始秒</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={chapter.start_sec ?? ''}
+                            onChange={(event) =>
+                              updateChapter(index, {
+                                ...chapter,
+                                start_sec: parseChapterNumber(event.target.value),
+                              })
+                            }
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
+                          />
+                        </label>
+
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">終了秒</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={chapter.end_sec ?? ''}
+                            onChange={(event) =>
+                              updateChapter(index, {
+                                ...chapter,
+                                end_sec: parseChapterNumber(event.target.value),
+                              })
+                            }
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
+                          />
+                        </label>
+
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">タイトル</span>
+                          <input
+                            value={chapter.title}
+                            onChange={(event) =>
+                              updateChapter(index, {
+                                ...chapter,
+                                title: event.target.value,
+                              })
+                            }
+                            placeholder="例: オープニング雑談"
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600 truncate focus:overflow-x-auto"
+                          />
+                        </label>
+
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => removeChapter(index)}
+                            className="rounded-lg border border-gray-800 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+
+                      <label className="block space-y-2">
+                        <span className="text-sm text-gray-300">要約</span>
+                        <textarea
+                          value={chapter.summary}
+                          onChange={(event) =>
+                            updateChapter(index, {
+                              ...chapter,
+                              summary: event.target.value,
+                            })
+                          }
+                          rows={3}
+                          placeholder="任意"
+                          className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+
+                {(chapterError || chapterSaveMessage) && (
+                  <div className="space-y-2">
+                    {chapterError && <p className="text-sm text-red-400">{chapterError}</p>}
+                    {chapterSaveMessage && <p className="text-sm text-emerald-400">{chapterSaveMessage}</p>}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={addChapter}
+                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
+                  >
+                    + 追加
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveChapters()}
+                    disabled={savingChapters}
+                    className="rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm font-medium text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                  >
+                    {savingChapters ? '保存中...' : 'チャプターを保存'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-300">盛り上がりワード</p>
+                  <p className="text-xs text-gray-500">印象に残る瞬間を、開始秒・発言・種別で調整します。</p>
+                </div>
+
+                <div className="space-y-3">
+                  {form.highlights.map((highlight, index) => (
+                    <div
+                      key={index}
+                      className="space-y-3 rounded-xl border border-gray-800 bg-gray-950 p-4"
+                    >
+                      <div className="grid gap-3 md:grid-cols-[120px_1fr_140px_auto]">
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">開始秒</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={highlight.start_sec}
+                            onChange={(event) =>
+                              updateHighlight(index, {
+                                ...highlight,
+                                start_sec: Number(event.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
+                          />
+                        </label>
+
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">発言</span>
+                          <input
+                            value={highlight.quote}
+                            onChange={(event) =>
+                              updateHighlight(index, {
+                                ...highlight,
+                                quote: event.target.value,
+                              })
+                            }
+                            placeholder="例: これはヤバい"
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600 truncate focus:overflow-x-auto"
+                          />
+                        </label>
+
+                        <label className="block space-y-2">
+                          <span className="text-sm text-gray-300">種別</span>
+                          <select
+                            value={highlight.reason}
+                            onChange={(event) =>
+                              updateHighlight(index, {
+                                ...highlight,
+                                reason: event.target.value as Highlight['reason'],
+                              })
+                            }
+                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
+                          >
+                            {HIGHLIGHT_REASONS.map((reason) => (
+                              <option key={reason} value={reason}>
+                                {reason}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => removeHighlight(index)}
+                            className="rounded-lg border border-gray-800 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addHighlight}
+                  className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
+                >
+                  + 追加
+                </button>
+              </div>
 
               {(pageError || saveMessage) && (
                 <div className="space-y-2">
