@@ -44,7 +44,7 @@ function formatStatus(status: string) {
 
 function formatJobKind(kind: string) {
   if (kind === 'fetch_new') return '新規取り込み'
-  if (kind === 'reprocess') return '一括再処理'
+  if (kind === 'reprocess') return '字幕エラー再試行'
   if (kind === 'reprocess_single') return '単体再処理'
   if (kind === 'weekly_magazine') return 'マガジン生成'
   return kind
@@ -492,7 +492,7 @@ export default function AdminPageClient() {
                     onClick={() => void handleEnqueueJob({ kind: 'reprocess' })}
                     className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
                   >
-                    {jobSubmittingKind === 'reprocess' ? '登録中...' : 'transcript_failed を一括再処理'}
+                    {jobSubmittingKind === 'reprocess' ? '登録中...' : '字幕取得に失敗した動画を再試行'}
                   </button>
                   <button
                     type="button"
