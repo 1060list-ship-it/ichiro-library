@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { getTestEnv, getTestEnvSkipReason } from '../helpers/env'
 
 const testEnv = getTestEnv()
 
 async function submitLogin(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
   options: {
     email: string
     password: string

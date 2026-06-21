@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob } from './actions'
 import {
+  cancelPipelineJob,
   enqueueJob,
   fetchAdminDashboard,
   fetchAdminStreamsPage,
@@ -150,7 +151,15 @@ function StatCard({ label, value }: { label: string; value: number }) {
   )
 }
 
-function JobTable({ jobs }: { jobs: PipelineJob[] }) {
+function JobTable({
+  jobs,
+  cancellingJobId,
+  onCancel,
+}: {
+  jobs: PipelineJob[]
+  cancellingJobId: string | null
+  onCancel: (jobId: string) => void
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-800 text-sm">
@@ -162,6 +171,7 @@ function JobTable({ jobs }: { jobs: PipelineJob[] }) {
             <th className="px-5 py-3 font-medium">Started</th>
             <th className="px-5 py-3 font-medium">Finished</th>
             <th className="px-5 py-3 font-medium">Error</th>
+            <th className="px-5 py-3 font-medium">操作</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-800">
@@ -184,6 +194,20 @@ function JobTable({ jobs }: { jobs: PipelineJob[] }) {
                   <span className="block max-w-xs truncate">{job.error_msg}</span>
                 ) : (
                   '-'
+                )}
+              </td>
+              <td className="px-5 py-4">
+                {job.status === 'pending' ? (
+                  <button
+                    type="button"
+                    disabled={cancellingJobId === job.id}
+                    onClick={() => onCancel(job.id)}
+                    className="rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                  >
+                    {cancellingJobId === job.id ? '取り消し中...' : '取り消し'}
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-600">-</span>
                 )}
               </td>
             </tr>
@@ -217,6 +241,7 @@ export default function AdminPageClient() {
   const [jobsError, setJobsError] = useState('')
   const [jobActionError, setJobActionError] = useState('')
   const [jobSubmittingKind, setJobSubmittingKind] = useState<string | null>(null)
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -381,6 +406,23 @@ export default function AdminPageClient() {
     }
   }
 
+  async function handleCancelJob(jobId: string) {
+    setCancellingJobId(jobId)
+    setJobActionError('')
+
+    try {
+      await cancelPipelineJob(jobId)
+      setJobs((prev) => prev.map((job) => (
+        job.id === jobId ? { ...job, status: 'cancelled' } : job
+      )))
+      await loadJobs()
+    } catch {
+      setJobActionError('ジョブの取り消しに失敗しました。')
+    } finally {
+      setCancellingJobId(null)
+    }
+  }
+
   if (!ready) {
     return (
       <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
@@ -477,6 +519,25 @@ export default function AdminPageClient() {
               </div>
 
               <div className="space-y-4 px-5 py-4">
+                <dl className="grid gap-3 rounded-xl border border-gray-800 bg-gray-950/50 p-4 text-sm text-gray-400 md:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-gray-200">新規動画を取り込む</dt>
+                    <dd className="mt-1">直近30日・最大20件を対象に新着取り込みジョブを積む。</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-200">字幕取得に失敗した動画を再試行</dt>
+                    <dd className="mt-1">`transcript_failed` の配信をまとめて再処理キューへ送る。</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-200">今週のマガジンを生成</dt>
+                    <dd className="mt-1">週次マガジン生成ジョブを追加して、表紙と本文の更新を走らせる。</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-200">ジョブ一覧を更新</dt>
+                    <dd className="mt-1">最新10件の実行状態を即座に再取得して、表示を追いつかせる。</dd>
+                  </div>
+                </dl>
+
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
@@ -520,7 +581,11 @@ export default function AdminPageClient() {
                 ) : jobs.length === 0 ? (
                   <p className="text-sm text-gray-500">登録済みジョブはありません。</p>
                 ) : (
-                  <JobTable jobs={jobs} />
+                  <JobTable
+                    jobs={jobs}
+                    cancellingJobId={cancellingJobId}
+                    onCancel={handleCancelJob}
+                  />
                 )}
               </div>
             </section>

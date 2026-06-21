@@ -355,6 +355,30 @@ export async function fetchRecentJobs(limit = 10): Promise<PipelineJob[]> {
   return (data ?? []) as PipelineJob[]
 }
 
+export async function cancelPipelineJob(jobId: string): Promise<void> {
+  await requireRole(['admin'])
+
+  const { error } = await (supabaseAdmin as never as {
+    from: (table: 'pipeline_jobs') => {
+      update: (value: { status: 'cancelled' }) => {
+        eq: (column: 'id', value: string) => {
+          eq: (column: 'status', value: 'pending') => Promise<{ error: unknown }>
+        }
+      }
+    }
+  })
+    .from('pipeline_jobs')
+    .update({ status: 'cancelled' })
+    .eq('id', jobId)
+    .eq('status', 'pending')
+
+  if (error) {
+    throw error
+  }
+
+  revalidatePath('/admin')
+}
+
 export async function setAdminStreamReviewed(videoId: string, isReviewed: boolean): Promise<AdminListStream> {
   await requireRole(['admin'])
 
