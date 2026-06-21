@@ -335,16 +335,26 @@ export default function StreamEditorClient({ videoId }: Props) {
           <Link href="/admin" className="text-sm text-gray-400 transition hover:text-white">
             ← 一覧に戻る
           </Link>
-          {stream?.youtube_url && (
-            <a
-              href={stream.youtube_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-gray-300 underline decoration-gray-700 underline-offset-4 hover:text-white"
-            >
-              YouTubeで開く
-            </a>
-          )}
+          <div className="flex items-center gap-4">
+            {stream && (
+              <Link
+                href={`/stream/${stream.video_id}`}
+                className="text-sm text-gray-300 underline decoration-gray-700 underline-offset-4 hover:text-white"
+              >
+                公開ページ
+              </Link>
+            )}
+            {stream?.youtube_url && (
+              <a
+                href={stream.youtube_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-gray-300 underline decoration-gray-700 underline-offset-4 hover:text-white"
+              >
+                YouTubeで開く
+              </a>
+            )}
+          </div>
         </div>
       </header>
 
