@@ -60,11 +60,20 @@ function JobStatusBadge({ status }: { status: string }) {
         ? 'border-emerald-800 bg-emerald-500/10 text-emerald-300'
         : status === 'failed'
           ? 'border-red-800 bg-red-500/10 text-red-300'
-          : 'border-gray-700 bg-gray-800 text-gray-200'
+          : status === 'cancelled'
+            ? 'border-gray-600 bg-gray-800 text-gray-500'
+            : 'border-gray-700 bg-gray-800 text-gray-200'
+
+  const label = status === 'pending' ? '処理待ち'
+    : status === 'running' ? '処理中'
+    : status === 'done' ? '完了'
+    : status === 'failed' ? 'エラー'
+    : status === 'cancelled' ? 'キャンセル'
+    : status
 
   return (
     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${className}`}>
-      {status}
+      {label}
     </span>
   )
 }
