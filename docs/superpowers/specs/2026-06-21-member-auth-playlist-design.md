@@ -74,6 +74,15 @@ async function requireRole(rolesAllowed: ('editor' | 'admin')[]) {
 ### セッション切れ時のハンドリング
 
 - D&D 並び替え中・プレイリスト編集中にセッションが切れた場合：Server Action が Unauthorized を返したらクライアントは `/login?return=/member` へリダイレクト
+- **`return` パラメータの検証必須**：ログイン成功後のリダイレクト先は `/` 始まりの相対パスのみ許可。`https://` / `//example.com` / 制御文字を含む値はフィッシング（open redirect）に悪用されるため `/` にフォールバックする
+
+  ```typescript
+  // ログイン後リダイレクト
+  const returnTo = searchParams.get('return') ?? '/'
+  const safe = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
+  redirect(safe)
+  ```
+
 - オートセーブ（後述）により編集中データは逐次保存されるため、セッション切れによる作業ロストは最小化される
 
 ### 権限剥奪時の即時失効
@@ -161,6 +170,8 @@ CREATE INDEX idx_playlist_streams_order ON playlist_streams(playlist_id, positio
 
 **並行編集時のロック**：reorder / rebalance の transaction では、冒頭で `SELECT id FROM playlist_streams WHERE playlist_id = $1 ORDER BY position FOR UPDATE` を実行して同一 `playlist_id` の全行をロックする。これにより並行リバランス同士・リバランス中 reorder の衝突を防ぐ。
 
+> ⚠️ **実装方式**：Supabase JS の `.from().update()` 連鎖では `BEGIN` / `FOR UPDATE` / `COMMIT` を含むトランザクションが実行できない。reorder・rebalance の Server Action は `SECURITY DEFINER` RPC（PostgreSQL 関数）として実装し、position 計算も JS の Number ではなく SQL `NUMERIC` 演算で完結させること（JS number は 15 桁の有効数字しかなく `NUMERIC(18,8)` の精度を維持できない）。
+
 同時に2つの editor が同じ位置へドロップした場合は楽観ロック（UNIQUE違反→クライアント側リトライ）で対処。
 
 **stream_id について**：`streams(id)` UUID への FK を張ることで存在しないストリームを DB レベルで防ぐ。UI での入力は YouTube `video_id`（例：`dQw4w9WgXcQ`）で行い、サーバー側で `streams.video_id` を検索して `streams.id` UUID に変換してから保存する。
@@ -202,30 +213,77 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 
 **承認の二重防止**：承認・却下アクションは `WHERE status = 'pending'` 条件付き UPDATE を使用。影響行数が 0 の場合はエラーを返す。
 
+**承認後の反映先**：承認 Server Action は `status = 'approved'` に更新した後、`entities.match_names` に word を追加する：
+
+```sql
+-- 承認 Action 内（transaction）
+UPDATE entity_word_requests SET status = 'approved', reviewed_by = $userId, reviewed_at = now()
+  WHERE id = $requestId AND status = 'pending';
+-- 重複しないよう array_append で追加（既存の match_names に含まれていなければ）
+UPDATE entities SET match_names = array_append(match_names, $word), updated_at = now()
+  WHERE id = $entityId AND NOT ($word = ANY(match_names));
+```
+
+**関連ルール**：
+
+- **重複防止**：`NOT ($word = ANY(match_names))` で既存エイリアスと重複する場合は entities を更新しない（requests 側は approved にする）
+- **同時承認**：2人の admin が同一申請を同時承認した場合、`WHERE status = 'pending'` 条件で片方は影響行数 0 → エラー返却。楽観ロックと同じ挙動
+- **却下後の再申請**：`rejected` 状態の申請は部分ユニークインデックスの対象外のため、同一 entity + word の新規 pending 申請が可能（再申請 OK）
+
 ### 監査証跡の規約
 - `*_by` 列（`created_by`, `updated_by`, `added_by`, `requested_by`, `reviewed_by`）には各 Server Action 内で `requireRole()` から得た `user.id` を明示的に書き込む
 - service-role 経由の書き込みであっても、認証済みユーザーの ID を明示することで「誰がやったか」を記録する
 
+> ⚠️ **旧 Cookie ブリッジ経由では書き込み系 Server Action を禁止する**。ブリッジは Supabase Auth セッションを持たないため `requireRole()` が返す `user.id` が存在せず、`*_by` 列（FK 参照）に NULL 以外を書けない（NOT NULL 制約違反になるケースもある）。ブリッジ経由でアクセスできるのは GET 系（ダッシュボード閲覧・一覧取得）のみとし、データ変更操作は Supabase Auth でのログインを要求する。
+
 ### `authenticated` ロールの READ 権限
 
-既存の公開 RLS ポリシーは `TO anon` で付与されており、ログイン後のクライアントは `authenticated` ロールで動作するため、明示的に `authenticated` への READ 権限が必要。migration で以下を追加すること：
+既存の公開 RLS ポリシーは `TO anon` で付与されており、ログイン後のクライアントは `authenticated` ロールで動作する。**`GRANT` だけでは RLS が通らない**。GRANT と RLS policy は別物で、両方が必要。migration で以下を追加すること：
 
 ```sql
--- 既存 anon READ ポリシーに authenticated を追加（streams, entities, stream_entities 等）
--- 例:
-GRANT SELECT ON streams TO authenticated;
-GRANT SELECT ON entities TO authenticated;
+-- ① テーブルレベルの GRANT（行アクセスの前提）
+GRANT SELECT ON streams        TO authenticated;
+GRANT SELECT ON chapters       TO authenticated;
+GRANT SELECT ON entities       TO authenticated;
 GRANT SELECT ON stream_entities TO authenticated;
+GRANT SELECT ON magazine_entities TO authenticated;
+GRANT SELECT ON magazines      TO authenticated;
 GRANT EXECUTE ON FUNCTION search_streams TO authenticated;
--- 他の公開テーブルも同様に追加
 
--- ⚠️ transcript 列の REVOKE を authenticated にも適用（anon 向け REVOKE は authenticated に引き継がれない）
--- これを忘れるとログイン後のユーザーが全文書き起こしを読める穴が開く
+-- ② RLS policy（行レベルのフィルタ）
+-- 既存の TO anon policy を TO anon, authenticated に変更、または authenticated 用を追加
+CREATE POLICY "streams_authenticated_read" ON streams
+  FOR SELECT TO authenticated USING (status IN ('public', 'unlisted'));
+
+CREATE POLICY "chapters_authenticated_read" ON chapters
+  FOR SELECT TO authenticated USING (true);
+
+-- entities, stream_entities, magazines 等も同様に追加（borma が全テーブル横断確認）
+
+-- ③ ⚠️ transcript 列の REVOKE を authenticated にも適用
+--    anon 向け REVOKE は authenticated に引き継がれない。これを漏らすとログイン後のユーザーが
+--    全文書き起こしを読める。
 REVOKE SELECT (transcript)         ON streams  FROM authenticated;
 REVOKE SELECT (transcript_segment) ON chapters FROM authenticated;
 ```
 
-または既存ポリシーを `TO anon, authenticated` へ更新する（その場合も transcript の REVOKE は必須）。borma が migration 作成時に全テーブルを横断確認すること。
+borma が migration 作成時に ① GRANT・② RLS policy・③ transcript REVOKE の3層を全テーブル横断で確認すること。
+
+### `select('*')` 禁止ルール
+
+> ⚠️ `transcript` / `transcript_segment` は列レベル REVOKE で隠しているが、Supabase JS で `.select('*')` を使うと Postgres がエラーを返す（列権限エラー）か、将来の実装変更で漏洩するリスクがある。**公開・member 側の `streams` / `chapters` クエリは safe column list を明示すること。**
+
+```typescript
+// NG
+supabase.from('streams').select('*')
+
+// OK — transcript を含まない列だけ指定
+supabase.from('streams').select(
+  'id, video_id, title, stream_date, duration_min, view_count, summary, tags, corner_names, guests, youtube_url, thumbnail_url, avg_rating, rating_count'
+)
+```
+
+`search_streams` RPC は SECURITY DEFINER 内で transcript を使用するが、返却列に transcript は含まないため安全。
 
 ---
 
@@ -307,7 +365,7 @@ REVOKE SELECT (transcript_segment) ON chapters FROM authenticated;
 └─────────────────────────────────────────┘
 
 🎮 ドラクエ11 スタート〜エンド　全8本
-作成：editor名 ／ 2026-06-20
+2026-06-20
 
 ✓ #1  [サムネイル] ドラクエ11 初見①  ─ 2023-04-01 ・ 2.1万再生
 ▶ #2  [サムネイル] ドラクエ11 初見②  ─ 2023-04-08 ・ 1.8万再生（再生中）
@@ -324,8 +382,10 @@ REVOKE SELECT (transcript_segment) ON chapters FROM authenticated;
 プレイリスト
   [サムネイル]             [サムネイル]             [サムネイル]
   ドラクエ11全編           FF7リメイク              ...
-  全8本 ・ by editor名     全12本 ・ by editor名
+  全8本                   全12本
 ```
+
+> 作成者名（"by editor名"）は公開画面では**表示しない**。`auth.users` を公開側から安全に JOIN できないため。`created_by` は `/member` 管理画面（ログイン済み）でのみ表示する。
 
 ---
 
