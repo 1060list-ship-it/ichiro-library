@@ -614,6 +614,12 @@ export default function AdminPageClient() {
                   </button>
                 </div>
 
+                <div className="rounded-lg border border-gray-800 bg-gray-950 px-4 py-3 text-xs text-gray-500">
+                  <span className="font-medium text-gray-400">ワーカー起動コマンド：</span>
+                  <code className="ml-2 font-mono text-gray-300">ichiro-worker</code>
+                  <span className="ml-3 text-gray-600">（キューのジョブを順番に処理します）</span>
+                </div>
+
                 {jobActionError && <p className="text-sm text-red-400">{jobActionError}</p>}
                 {jobsError && <p className="text-sm text-red-400">{jobsError}</p>}
 
