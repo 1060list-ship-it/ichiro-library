@@ -29,12 +29,12 @@ logging.basicConfig(
 logger = logging.getLogger("reprocess")
 
 
-def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
+def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = False):
     video_id = row["video_id"]
     stream_id = row["id"]
     transcript_text = row.get("transcript") or ""
 
-    if row.get("is_reviewed"):
+    if row.get("is_reviewed") and not force:
         logger.info(f"[{video_id}] レビュー済みのため再処理をスキップ")
         return
 
@@ -98,7 +98,7 @@ def run(dry_run: bool = False, target_video_id: str = None, no_summary_only: boo
             continue
         logger.info(f"--- {i + 1}/{total}件目: {vid} ---")
         try:
-            reprocess_one(supabase, gemini, row, dry_run)
+            reprocess_one(supabase, gemini, row, dry_run, force=bool(target_video_id))
         except Exception as e:
             logger.error(f"[{vid}] エラー: {e}", exc_info=True)
         if i < total - 1:
