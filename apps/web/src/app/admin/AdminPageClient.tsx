@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob } from './actions'
 import {
   cancelPipelineJob,
+  clearFinishedJobs,
   enqueueJob,
   fetchAdminDashboard,
   fetchAdminStreamsPage,
@@ -257,6 +258,7 @@ export default function AdminPageClient() {
   const [jobActionError, setJobActionError] = useState('')
   const [jobSubmittingKind, setJobSubmittingKind] = useState<string | null>(null)
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
+  const [clearingJobs, setClearingJobs] = useState(false)
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -421,6 +423,18 @@ export default function AdminPageClient() {
     }
   }
 
+  async function handleClearFinishedJobs() {
+    setClearingJobs(true)
+    try {
+      await clearFinishedJobs()
+      await loadJobs()
+    } catch {
+      setJobActionError('完了済みジョブの削除に失敗しました。')
+    } finally {
+      setClearingJobs(false)
+    }
+  }
+
   async function handleCancelJob(jobId: string) {
     setCancellingJobId(jobId)
     setJobActionError('')
@@ -551,6 +565,10 @@ export default function AdminPageClient() {
                     <dt className="font-medium text-gray-200">ジョブ一覧を更新</dt>
                     <dd className="mt-1">最新10件の実行状態を即座に再取得して、表示を追いつかせる。</dd>
                   </div>
+                  <div>
+                    <dt className="font-medium text-gray-200">完了済みジョブを削除</dt>
+                    <dd className="mt-1">完了・キャンセル・エラーのジョブをまとめて削除してリストを整理する。</dd>
+                  </div>
                 </dl>
 
                 <div className="flex flex-wrap gap-3">
@@ -585,6 +603,14 @@ export default function AdminPageClient() {
                     className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
                   >
                     {jobsLoading ? '更新中...' : 'ジョブ一覧を更新'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={clearingJobs || jobsLoading}
+                    onClick={() => void handleClearFinishedJobs()}
+                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-red-700 hover:text-red-300 disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                  >
+                    {clearingJobs ? '削除中...' : '完了済みジョブを削除'}
                   </button>
                 </div>
 
