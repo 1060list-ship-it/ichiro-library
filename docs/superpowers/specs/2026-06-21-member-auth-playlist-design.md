@@ -220,9 +220,12 @@ CREATE TABLE bookmarks (
 ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
 CREATE INDEX idx_bookmarks_stream ON bookmarks(stream_id);
 -- RLS: 本人行のみ読み書き可（bookmarks は anon からは不可視）
+-- ⚠️ user_roles 行なし（権限剥奪済み）の authenticated ユーザーが直接呼び出せないよう EXISTS チェックを追加
 GRANT SELECT, INSERT, DELETE ON bookmarks TO authenticated;
 CREATE POLICY "bookmarks_self_access" ON bookmarks
-  FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid() AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()))
+  WITH CHECK (user_id = auth.uid() AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()));
 ```
 
 - ログイン中の editor / admin のみ操作可能（未ログインには★ボタン非表示）
@@ -244,15 +247,18 @@ CREATE TABLE entity_word_requests (
 );
 ALTER TABLE entity_word_requests ENABLE ROW LEVEL SECURITY;
 -- RLS: 自分の申請 + admin は全件読める。INSERT は authenticated のみ。UPDATE（承認/却下）は service-role のみ
+-- ⚠️ user_roles 行なし（権限剥奪済み）の authenticated ユーザーが直接呼び出せないよう、
+--    read・insert 両ポリシーに user_roles 存在チェックを追加
 GRANT SELECT ON entity_word_requests TO authenticated;
 GRANT INSERT ON entity_word_requests TO authenticated;
 CREATE POLICY "entity_word_requests_read" ON entity_word_requests
   FOR SELECT TO authenticated USING (
-    requested_by = auth.uid()
-    OR EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
+    (requested_by = auth.uid() AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()))
+    OR EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid() AND ur.role = 'admin')
   );
 CREATE POLICY "entity_word_requests_insert" ON entity_word_requests
-  FOR INSERT TO authenticated WITH CHECK (requested_by = auth.uid());
+  FOR INSERT TO authenticated
+  WITH CHECK (requested_by = auth.uid() AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = auth.uid()));
 -- UPDATE（承認/却下）は service-role からのみ（requireRole(['admin']) で認可確認後）
 -- 部分ユニークインデックス：同一 entity + word の pending 申請は1件まで
 CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pending';
@@ -747,6 +753,10 @@ async function fetchBookmarkedStreams(filters: StreamFilters) {
 - `return=/\evil.com` → ログイン後 `/` にリダイレクトされること（バックスラッシュ正規化による open redirect 防止）
 - `return=/%5C%5Cevil.com` → ログイン後 `/` にリダイレクトされること（URL エンコードされたバックスラッシュの防止）
 - Cookie ブリッジ廃止後（手順5完了後）、旧 Cookie で `/admin` にアクセスできないこと
+- `user_roles` 行なし（権限剥奪済み）の authenticated セッションで `bookmarks` を Supabase JS で直接 SELECT → 0行が返ること（RLS で弾かれる）
+- `user_roles` 行なし（権限剥奪済み）の authenticated セッションで `bookmarks` に直接 INSERT → RLS の WITH CHECK 違反でエラーになること
+- `user_roles` 行なし（権限剥奪済み）の authenticated セッションで `entity_word_requests` を直接 SELECT → 0行が返ること（RLS で弾かれる）
+- `user_roles` 行なし（権限剥奪済み）の authenticated セッションで `entity_word_requests` に直接 INSERT → RLS の WITH CHECK 違反でエラーになること
 
 ---
 
