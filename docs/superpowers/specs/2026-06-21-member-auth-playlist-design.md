@@ -80,7 +80,8 @@ async function requireRole(rolesAllowed: ('editor' | 'admin')[]) {
   ```typescript
   // ログイン後リダイレクト
   const returnTo = searchParams.get('return') ?? '/'
-  const safe = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
+  // ⚠️ startsWith('/') だけでは /%0d%0a（CRLF インジェクション）が通過する。制御文字も拒否すること
+  const safe = /^\/(?!\/)[\x20-\x7E]*$/.test(returnTo) ? returnTo : '/'
   redirect(safe)
   ```
 
@@ -125,6 +126,8 @@ CREATE TABLE user_roles (
   granted_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+-- entity_word_requests の RLS ポリシーが user_roles を EXISTS で参照するため GRANT が必須
+GRANT SELECT ON user_roles TO authenticated;
 -- requireRole() は service-role client で読むため、authenticated READ ポリシーは実行上不要だが念のため付与
 CREATE POLICY "user_roles_self_read" ON user_roles
   FOR SELECT TO authenticated USING (user_id = auth.uid());
@@ -256,9 +259,12 @@ CREATE UNIQUE INDEX ON entity_word_requests (entity_id, word) WHERE status = 'pe
 
 ```sql
 -- 承認 Action 内（SECURITY DEFINER RPC 内、または supabase service-role で BEGIN/COMMIT を明示）
--- ① entities 行を FOR UPDATE でロック（同一 word・別 request の並行承認による配列重複を防ぐ）
+-- ① request 行をロック（entity_id と word を DB から取得。外部入力 $entityId/$word をそのまま使わずDB側で正当性を保証）
+SELECT entity_id, word INTO $entityId, $word
+  FROM entity_word_requests WHERE id = $requestId AND status = 'pending' FOR UPDATE;
+-- ② entities 行を FOR UPDATE でロック（同一 word・別 request の並行承認による配列重複を防ぐ）
 SELECT id FROM entities WHERE id = $entityId FOR UPDATE;
--- ② entity_word_requests を承認（同一 request の二重承認は WHERE status='pending' で防ぐ）
+-- ③ entity_word_requests を承認（同一 request の二重承認は WHERE status='pending' で防ぐ）
 UPDATE entity_word_requests SET status = 'approved', reviewed_by = $userId, reviewed_at = now()
   WHERE id = $requestId AND status = 'pending';
 -- ③ match_names に追加（重複防止。updated_at は update_updated_at() トリガーが自動更新するため手動記述不要）
@@ -306,6 +312,14 @@ CREATE POLICY "chapters_authenticated_read" ON chapters
   ));
 -- ⚠️ USING (true) は使用しない。transcript_segment の REVOKE が漏れた際に全章が露出するため、
 --    chapters は必ず親 streams の status フィルタを通すこと
+
+-- ⚠️ 001_initial_schema.sql の chapters_anon_read は USING(true) のまま残存しているため migration で差し替える
+DROP POLICY IF EXISTS "chapters_anon_read" ON chapters;
+CREATE POLICY "chapters_anon_read" ON chapters
+  FOR SELECT TO anon
+  USING (EXISTS (
+    SELECT 1 FROM streams s WHERE s.id = stream_id AND s.status IN ('public', 'unlisted')
+  ));
 
 -- entities, stream_entities, magazines 等も同様に追加（borma が全テーブル横断確認）
 
@@ -460,8 +474,8 @@ supabase.from('streams').select(
 
 1. Supabase Auth 導入・`user_roles` テーブル作成・`proxy.ts` 新規作成
 2. **一幾の admin アカウントを先に作成**してから旧 Cookie 認証の廃止へ進む
-3. `requireRole()` ヘルパ新規作成。**並行稼働期間中は旧 Cookie 認証も一時的にフォールバックとして受理するブリッジ**を噛ませ、切替中に管理画面が半壊しないようにする。ブリッジの廃止条件は以下を全て満たしたとき：①全ページの切替完了、②一幾が `/admin` での動作を確認、③`ADMIN_PASSWORD` env var の削除準備完了。ブリッジは **admin ロールのみ**に適用（editor は Supabase Auth 専用）。ブリッジ稼働中は、**`requireRole('admin')` 内の fallback 経路そのものに** `console.warn('[auth-bridge] 旧 Cookie 認証フォールバック使用 userId=xxx')` を記録する（Server Action ログだけでは、ページ DAL 経由の fallback 使用が漏れるため）
-4. 既存の `requireAdminSession()` / `checkAdminSession()` を `requireRole('admin')` に**ページ単位**で切替（関数1本ずつではなくページ単位で一括切替することで、半端な状態を避ける）
+3. `requireRole()` ヘルパ新規作成。**並行稼働期間中は旧 Cookie 認証も一時的にフォールバックとして受理するブリッジ**を噛ませ、切替中に管理画面が半壊しないようにする。ブリッジの廃止条件は以下を全て満たしたとき：①全ページの切替完了、②一幾が `/admin` での動作を確認、③`ADMIN_PASSWORD` env var の削除準備完了。ブリッジは **admin ロールのみ**に適用（editor は Supabase Auth 専用）。ブリッジ稼働中は、**`requireRole(['admin'])` 内の fallback 経路そのものに** `console.warn('[auth-bridge] 旧 Cookie 認証フォールバック使用 userId=xxx')` を記録する（Server Action ログだけでは、ページ DAL 経由の fallback 使用が漏れるため）
+4. 既存の `requireAdminSession()` / `checkAdminSession()` を `requireRole(['admin'])` に**ページ単位**で切替（関数1本ずつではなくページ単位で一括切替することで、半端な状態を避ける）
 5. 全ページの切替完了後 **7日間**（一幾が `/admin` を毎日使用して問題なし）を目安に `ADMIN_PASSWORD` env var を削除する。期間・確認者・確認ログの明記：一幾が 7日後に Next.js ログで `auth-bridge` 行がゼロであることを確認してから削除を実行する。
    > ⚠️ XServer の Node.js ログはローテーション設定によっては 7日以内に古いログが切り捨てられる可能性がある。事前に `pm2 logs --lines 10000` 等で保持期間を確認し、必要なら `ADMIN_PASSWORD` 削除前日に手動でログをエクスポートしてから削除を実行すること
 6. 旧 `useAdminAuth.ts` / `verifyAdminPassword` / `clearAdminSession` を削除
@@ -499,6 +513,10 @@ VALUES ('<一幾のauth.users.id>', 'admin', '<一幾のauth.users.id>');
 
 ```sql
 -- 012_member_auth.sql（または適切な migration 番号）に記載
+-- ⚠️ 旧9引数版を先に削除（オーバーロード防止：PostgreSQL は引数型が異なると別関数として登録するため旧版が残存する）
+DROP FUNCTION IF EXISTS public.search_streams(
+  TEXT, DATE, DATE, TEXT[], TEXT[], TEXT[], TEXT, INTEGER, INTEGER
+);
 CREATE OR REPLACE FUNCTION search_streams(
   query          TEXT,
   date_from      DATE    DEFAULT NULL,
@@ -698,7 +716,7 @@ async function fetchBookmarkedStreams(filters: StreamFilters) {
 | `search_streams` RPC（anon） | 200 | 200 | 200 | transcript 列が返らないこと |
 | `bookmarks` テーブル直接 SELECT（anon key） | 空 or 0行 | - | - | RLS で防ぐ |
 
-| 旧 Cookie ブリッジ（有効セッション + `user_roles` 行なし） | - | 403（proxy.ts通過後 DAL でブロック） | 403（proxy.ts通過後 DAL でブロック） | 権限剥奪済みユーザー。Cookie があっても DB に行なければ requireRole() が null を返しエラー |
+| Supabase Auth セッション有効 + `user_roles` 行なし（権限剥奪済み） | - | 403（proxy.ts通過後 DAL でブロック） | 403（proxy.ts通過後 DAL でブロック） | 旧 Cookie ブリッジとは別概念。有効な Supabase Auth セッションがあっても user_roles 行が削除されていれば requireRole() が null を返しブロック |
 
 > ⚠️ **`GET /member` における権限剥奪済みユーザーの挙動**：proxy.ts は Cookie の有無しか見ないため 200 を返してページを表示しようとする。しかし当該ページの Server Component / Server Action は `requireRole()` → `getCurrentUserRole()` が `null` を返すためブロックされる。「proxy.ts は 200 を通すが、ページ内の認可で弾かれる」という二段構成の挙動が正しい動作。テストは DAL 層（Server Action / `requireRole()`）で 403 を確認すること。
 
@@ -710,8 +728,8 @@ async function fetchBookmarkedStreams(filters: StreamFilters) {
 - 並行リバランステスト：2クライアントが同時に reorder を行い、最終状態の order が一意であること
 - 同一 position への同時ドロップ：2クライアントが同じ隙間にドロップし、後発が UNIQUE 違反でリトライすること
 - `authenticated` ユーザーが `transcript` / `transcript_segment` 列を取得できないこと（REVOKE 確認）
-  - `editor` セッションで `supabase.from('streams').select('transcript')` を直接呼び、エラーまたは空が返ること
-  - `editor` セッションで `supabase.from('chapters').select('transcript_segment')` を直接呼び、エラーまたは空が返ること
+  - `editor` セッションで `supabase.from('streams').select('transcript')` を直接呼び、PostgREST 経由で列権限エラー（42501）が返ること
+  - `editor` セッションで `supabase.from('chapters').select('transcript_segment')` を直接呼び、PostgREST 経由で列権限エラー（42501）が返ること
   - これらは migration テスト（psql で `authenticated` ロールに SET ROLE してから確認）として分離することを推奨
 - `entity word request` 承認後、対象 `entities.match_names` に word が追加されていること
 - 承認対象 word が既に `match_names` に含まれる場合、`entities` 行は更新されず重複が生じないこと
@@ -719,6 +737,7 @@ async function fetchBookmarkedStreams(filters: StreamFilters) {
 - `return=https://evil.com` → ログイン後 `/` にリダイレクトされること
 - `return=//evil.com` → ログイン後 `/` にリダイレクトされること
 - `return=/member` → ログイン後 `/member` にリダイレクトされること（正常系）
+- `return=/%0d%0aSet-Cookie:%20session=evil` → ログイン後 `/` にリダイレクトされること（CRLF インジェクション・制御文字を含む open redirect 防止）
 - Cookie ブリッジ廃止後（手順5完了後）、旧 Cookie で `/admin` にアクセスできないこと
 
 ---
