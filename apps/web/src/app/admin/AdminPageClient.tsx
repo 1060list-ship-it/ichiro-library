@@ -178,7 +178,13 @@ function JobTable({
           {jobs.map((job) => (
             <tr key={job.id} className="align-top">
               <td className="px-5 py-4 text-gray-200">
-                <div>{formatJobKind(job.kind)}</div>
+                {job.video_id ? (
+                  <Link href={`/admin/stream/${job.video_id}`} className="hover:underline">
+                    {formatJobKind(job.kind)}
+                  </Link>
+                ) : (
+                  <div>{formatJobKind(job.kind)}</div>
+                )}
                 {job.video_id && (
                   <div className="mt-1 text-xs text-gray-500">{job.video_id}</div>
                 )}
