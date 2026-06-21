@@ -379,6 +379,18 @@ export async function cancelPipelineJob(jobId: string): Promise<void> {
   revalidatePath('/admin')
 }
 
+export async function deletePipelineJob(jobId: string): Promise<void> {
+  await requireRole(['admin'])
+
+  const { error } = await supabaseAdmin
+    .from('pipeline_jobs' as never)
+    .delete()
+    .eq('id' as never, jobId)
+
+  if (error) throw error
+  revalidatePath('/admin')
+}
+
 export async function clearFinishedJobs(): Promise<void> {
   await requireRole(['admin'])
 

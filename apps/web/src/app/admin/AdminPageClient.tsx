@@ -6,6 +6,7 @@ import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob 
 import {
   cancelPipelineJob,
   clearFinishedJobs,
+  deletePipelineJob,
   enqueueJob,
   fetchAdminDashboard,
   fetchAdminStreamsPage,
@@ -164,11 +165,15 @@ function StatCard({ label, value }: { label: string; value: number }) {
 function JobTable({
   jobs,
   cancellingJobId,
+  deletingJobId,
   onCancel,
+  onDelete,
 }: {
   jobs: PipelineJob[]
   cancellingJobId: string | null
+  deletingJobId: string | null
   onCancel: (jobId: string) => void
+  onDelete: (jobId: string) => void
 }) {
   return (
     <div className="overflow-x-auto">
@@ -213,18 +218,26 @@ function JobTable({
                 )}
               </td>
               <td className="px-5 py-4">
-                {job.status === 'pending' ? (
+                <div className="flex flex-col gap-1">
+                  {job.status === 'pending' && (
+                    <button
+                      type="button"
+                      disabled={cancellingJobId === job.id}
+                      onClick={() => onCancel(job.id)}
+                      className="text-xs text-gray-400 hover:text-white disabled:opacity-40"
+                    >
+                      {cancellingJobId === job.id ? '取り消し中...' : '取り消し'}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    disabled={cancellingJobId === job.id}
-                    onClick={() => onCancel(job.id)}
-                    className="rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:border-gray-800 disabled:text-gray-600"
+                    disabled={deletingJobId === job.id}
+                    onClick={() => onDelete(job.id)}
+                    className="text-xs text-red-500 hover:text-red-300 disabled:opacity-40"
                   >
-                    {cancellingJobId === job.id ? '取り消し中...' : '取り消し'}
+                    {deletingJobId === job.id ? '削除中...' : '削除'}
                   </button>
-                ) : (
-                  <span className="text-xs text-gray-600">-</span>
-                )}
+                </div>
               </td>
             </tr>
           ))}
@@ -258,6 +271,7 @@ export default function AdminPageClient() {
   const [jobActionError, setJobActionError] = useState('')
   const [jobSubmittingKind, setJobSubmittingKind] = useState<string | null>(null)
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null)
   const [clearingJobs, setClearingJobs] = useState(false)
 
   const loadDashboardData = useCallback(async () => {
@@ -420,6 +434,19 @@ export default function AdminPageClient() {
       setJobActionError('ジョブ登録に失敗しました。')
     } finally {
       setJobSubmittingKind(null)
+    }
+  }
+
+  async function handleDeleteJob(jobId: string) {
+    setDeletingJobId(jobId)
+    setJobActionError('')
+    try {
+      await deletePipelineJob(jobId)
+      setJobs((prev) => prev.filter((job) => job.id !== jobId))
+    } catch {
+      setJobActionError('ジョブの削除に失敗しました。')
+    } finally {
+      setDeletingJobId(null)
     }
   }
 
@@ -631,7 +658,9 @@ export default function AdminPageClient() {
                   <JobTable
                     jobs={jobs}
                     cancellingJobId={cancellingJobId}
+                    deletingJobId={deletingJobId}
                     onCancel={handleCancelJob}
+                    onDelete={handleDeleteJob}
                   />
                 )}
               </div>
