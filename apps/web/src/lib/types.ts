@@ -79,6 +79,52 @@ export type MagazineEntity = {
   entity_id: string
 }
 
+export type UserRole = 'editor' | 'admin'
+
+export type Playlist = {
+  id: string
+  title: string
+  description: string | null
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PlaylistStream = {
+  id: string
+  playlist_id: string
+  stream_id: string
+  position: string
+  added_by: string | null
+  added_at: string
+}
+
+export type Bookmark = {
+  user_id: string
+  stream_id: string
+  created_at: string
+}
+
+export type EntityWordRequest = {
+  id: string
+  entity_id: string
+  word: string
+  status: 'pending' | 'approved' | 'rejected'
+  requested_by: string | null
+  reviewed_by: string | null
+  requested_at: string
+  reviewed_at: string | null
+}
+
+export type SearchLog = {
+  id: string
+  query: string | null
+  result_count: number | null
+  user_id: string | null
+  searched_at: string
+}
+
 export type SearchStreamsArgs = {
   query?: string | null
   date_from?: string | null
@@ -86,6 +132,7 @@ export type SearchStreamsArgs = {
   filter_tags?: string[] | null
   filter_corners?: string[] | null
   filter_guests?: string[] | null
+  filter_entity_id?: string | null
   sort_by?: string | null
   page_num?: number | null
   page_size?: number | null
@@ -100,6 +147,41 @@ export type Database = {
       entities: { Row: Entity; Insert: Omit<Entity, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Entity> }
       stream_entities: { Row: StreamEntity; Insert: StreamEntity; Update: Partial<StreamEntity> }
       magazine_entities: { Row: MagazineEntity; Insert: MagazineEntity; Update: Partial<MagazineEntity> }
+      user_roles: {
+        Row: { user_id: string; role: UserRole; granted_by: string | null; granted_at: string | null }
+        Insert: { user_id: string; role: UserRole; granted_by?: string | null; granted_at?: string | null }
+        Update: { user_id?: string; role?: UserRole; granted_by?: string | null; granted_at?: string | null }
+      }
+      playlists: {
+        Row: Playlist
+        Insert: Omit<Playlist, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string | null; updated_at?: string | null }
+        Update: Partial<Playlist>
+      }
+      playlist_streams: {
+        Row: PlaylistStream
+        Insert: Omit<PlaylistStream, 'id' | 'added_at'> & { id?: string; added_at?: string | null }
+        Update: Partial<PlaylistStream>
+      }
+      bookmarks: {
+        Row: Bookmark
+        Insert: Omit<Bookmark, 'created_at'> & { created_at?: string | null }
+        Update: Partial<Bookmark>
+      }
+      entity_word_requests: {
+        Row: EntityWordRequest
+        Insert: Omit<EntityWordRequest, 'id' | 'status' | 'requested_at' | 'reviewed_at'> & {
+          id?: string
+          status?: EntityWordRequest['status'] | null
+          requested_at?: string | null
+          reviewed_at?: string | null
+        }
+        Update: Partial<EntityWordRequest>
+      }
+      search_logs: {
+        Row: SearchLog
+        Insert: Omit<SearchLog, 'id' | 'searched_at'> & { id?: string; searched_at?: string | null }
+        Update: Partial<SearchLog>
+      }
     }
     Functions: {
       search_streams: {
