@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 # プロジェクトルートの .env.local を読み込む
 load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 
-from fetch_new_videos import get_youtube_client, get_channel_id, fetch_live_archives, filter_new_videos, _fetch_video_details
+from fetch_new_videos import get_youtube_client, get_channel_id, fetch_live_archives, fetch_all_live_archives_via_playlist, filter_new_videos, _fetch_video_details
 from get_transcript import get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
 from store import get_supabase_client, get_existing_video_ids, upsert_stream, insert_chapters, update_view_count_7d, get_transcript_retry_count, queue_pipeline_job
@@ -88,7 +88,7 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
     return transcript_result.source != "failed"
 
 
-def run_batch(dry_run: bool = False, days: int = 30, max_videos: int = 0):
+def run_batch(dry_run: bool = False, days: int = 30, max_videos: int = 0, backfill: bool = False):
     youtube = get_youtube_client()
     supabase = get_supabase_client()
     gemini = get_gemini_client()
@@ -99,8 +99,12 @@ def run_batch(dry_run: bool = False, days: int = 30, max_videos: int = 0):
     existing_ids = get_existing_video_ids(supabase)
     logger.info(f"既存動画数: {len(existing_ids)}")
 
-    published_after = datetime.now(timezone.utc) - timedelta(days=days)
-    all_videos = fetch_live_archives(youtube, channel_id, published_after=published_after)
+    if backfill:
+        logger.info("バックフィルモード: アップロードプレイリスト経由で全ライブアーカイブを取得")
+        all_videos = fetch_all_live_archives_via_playlist(youtube, channel_id)
+    else:
+        published_after = datetime.now(timezone.utc) - timedelta(days=days)
+        all_videos = fetch_live_archives(youtube, channel_id, published_after=published_after)
     new_videos = filter_new_videos(all_videos, existing_ids)
 
     if max_videos > 0:
@@ -180,9 +184,10 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Supabaseへの書き込みを行わない")
     parser.add_argument("--days", type=int, default=30, help="何日前まで遡るか（デフォルト: 30、3年分なら1095）")
     parser.add_argument("--max-videos", type=int, default=0, help="1回のバッチで処理する最大件数（0=無制限）")
+    parser.add_argument("--backfill", action="store_true", help="アップロードプレイリスト経由で全ライブアーカイブを取得（大量バックフィル用）")
     args = parser.parse_args()
 
     if args.video:
         run_single(args.video, dry_run=args.dry_run)
     else:
-        run_batch(dry_run=args.dry_run, days=args.days, max_videos=args.max_videos)
+        run_batch(dry_run=args.dry_run, days=args.days, max_videos=args.max_videos, backfill=args.backfill)

@@ -2,9 +2,10 @@
 既存動画をAI再処理する（新プロンプトでsongs・talk_topics・corner_namesを更新）
 
 使い方:
-  python reprocess_videos.py           # 全動画を再処理
-  python reprocess_videos.py --dry-run # 確認のみ
-  python reprocess_videos.py --video VIDEO_ID  # 特定動画のみ
+  python reprocess_videos.py                    # 全動画を再処理
+  python reprocess_videos.py --no-summary-only  # 要約なし動画のみ（Gemini上限回復後のバックフィル用）
+  python reprocess_videos.py --dry-run          # 確認のみ
+  python reprocess_videos.py --video VIDEO_ID   # 特定動画のみ
 """
 
 import sys
@@ -72,12 +73,15 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool):
     logger.info(f"[{video_id}] 更新完了")
 
 
-def run(dry_run: bool = False, target_video_id: str = None):
+def run(dry_run: bool = False, target_video_id: str = None, no_summary_only: bool = False):
     supabase = get_supabase_client()
     gemini = get_gemini_client()
 
     if target_video_id:
         resp = supabase.table("streams").select("*").eq("video_id", target_video_id).execute()
+    elif no_summary_only:
+        resp = supabase.table("streams").select("*").is_("summary", "null").order("stream_date").execute()
+        logger.info("モード: 要約なし動画のみ")
     else:
         resp = supabase.table("streams").select("*").execute()
 
@@ -107,5 +111,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--video", type=str, help="特定の動画IDのみ再処理")
+    parser.add_argument("--no-summary-only", action="store_true", help="要約なし動画のみ再処理（Gemini上限回復後のバックフィル用）")
     args = parser.parse_args()
-    run(dry_run=args.dry_run, target_video_id=args.video)
+    run(dry_run=args.dry_run, target_video_id=args.video, no_summary_only=args.no_summary_only)

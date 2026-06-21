@@ -113,5 +113,48 @@ def _fetch_video_details(youtube, video_ids: list[str]) -> list[dict]:
     return results
 
 
+def fetch_all_live_archives_via_playlist(youtube, channel_id: str) -> list[dict]:
+    """アップロードプレイリスト経由で全ライブアーカイブを取得する（バックフィル用）。
+    search.list の eventType=completed は最大50件しか返さないため、
+    大量の過去動画を取得する場合はこちらを使う。
+    """
+    # uploads プレイリスト ID を取得
+    ch_resp = youtube.channels().list(part="contentDetails", id=channel_id).execute()
+    uploads_playlist = ch_resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    logger.info(f"uploads playlist: {uploads_playlist}")
+
+    # 全動画 ID を収集（ページネーション）
+    all_video_ids = []
+    page_token = None
+    while True:
+        params = {"part": "snippet", "playlistId": uploads_playlist, "maxResults": 50}
+        if page_token:
+            params["pageToken"] = page_token
+        resp = youtube.playlistItems().list(**params).execute()
+        for item in resp.get("items", []):
+            vid = item["snippet"].get("resourceId", {}).get("videoId")
+            if vid:
+                all_video_ids.append(vid)
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    logger.info(f"総アップロード数: {len(all_video_ids)} 件")
+
+    # 50件ずつ動画詳細を取得し、liveStreamingDetails を持つものだけ返す
+    live_videos = []
+    for i in range(0, len(all_video_ids), 50):
+        batch = all_video_ids[i:i + 50]
+        details = _fetch_video_details(youtube, batch)
+        for v in details:
+            # liveStreamingDetails が存在する = ライブ配信アーカイブ
+            if v.get("started_at"):
+                live_videos.append(v)
+
+    # 古い順に並べ替え
+    live_videos.sort(key=lambda v: v.get("stream_date") or "")
+    logger.info(f"ライブアーカイブ: {len(live_videos)} 件")
+    return live_videos
+
+
 def filter_new_videos(videos: list[dict], existing_ids: set[str]) -> list[dict]:
     return [v for v in videos if v["video_id"] not in existing_ids]

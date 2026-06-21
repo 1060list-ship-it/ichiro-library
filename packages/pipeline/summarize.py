@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from google import genai
+from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,11 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
+_NO_THINKING_CONFIG = types.GenerateContentConfig(
+    thinking_config=types.ThinkingConfig(thinking_budget=0)
+)
+
+
 @retry(
     retry=retry_if_exception_type(Exception),
     wait=wait_exponential(multiplier=2, min=5, max=60),
@@ -32,7 +38,7 @@ def get_gemini_client():
     reraise=True,
 )
 def _generate_with_retry(model, prompt: str):
-    return model.models.generate_content(model=MODEL_NAME, contents=prompt)
+    return model.models.generate_content(model=MODEL_NAME, contents=prompt, config=_NO_THINKING_CONFIG)
 
 
 def summarize(transcript_text: str, model=None) -> Optional[dict]:
@@ -59,7 +65,7 @@ def summarize(transcript_text: str, model=None) -> Optional[dict]:
         if m:
             raw = m.group(1).strip()
 
-        result = json.loads(raw)
+        result = json.loads(raw, strict=False)
         _validate_result(result)
         logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, highlights={len(result.get('highlights', []))}, tags={result.get('tags', [])}")
         return result
