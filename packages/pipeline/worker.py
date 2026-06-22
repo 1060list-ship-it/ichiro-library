@@ -125,7 +125,8 @@ def run_job(client, job: Dict[str, Any], dry_run: bool = False):
         from whisper_transcribe import transcribe_and_store
         if not video_id:
             raise ValueError("whisper_transcribe requires video_id")
-        transcribe_and_store(client, video_id, dry_run=dry_run)
+        local = bool(payload.get("local", False))
+        transcribe_and_store(client, video_id, dry_run=dry_run, local=local)
         return
 
     if kind == "weekly_magazine":
