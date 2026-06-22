@@ -562,6 +562,7 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
 
   revalidatePath('/admin')
   revalidatePath(`/admin/stream/${input.videoId}`)
+  revalidatePath(`/stream/${input.videoId}`)
 
   return data
 }
@@ -606,6 +607,7 @@ export async function saveAdminChapters(input: SaveAdminChaptersInput): Promise<
 
   revalidatePath('/admin')
   revalidatePath(`/admin/stream/${input.videoId}`)
+  revalidatePath(`/stream/${input.videoId}`)
 }
 
 // ── Entity management ────────────────────────────────────────────────────────
