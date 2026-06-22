@@ -41,6 +41,23 @@ def get_existing_stream(client: Client, video_id: str) -> Optional[dict]:
     return rows[0] if rows else None
 
 
+def save_transcript_snapshot(client: Client, stream_id: str, source: str, snippets: list[dict]) -> str:
+    """transcript_snapshots に保存して snapshot_id を返す。"""
+    resp = client.table("transcript_snapshots").insert({
+        "stream_id": stream_id,
+        "source": source,
+        "lang": "ja",
+        "snippets": snippets,
+    }).execute()
+    rows = resp.data or []
+    if not rows or not rows[0].get("id"):
+        raise ValueError(f"transcript_snapshots insert failed: stream_id={stream_id} source={source}")
+
+    snapshot_id = rows[0]["id"]
+    logger.info(f"transcript_snapshot 保存完了: stream_id={stream_id} snapshot_id={snapshot_id} source={source}")
+    return snapshot_id
+
+
 def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict]) -> tuple[str, bool]:
     """
     streams テーブルに1件 upsert する。
@@ -69,8 +86,8 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "transcript":    transcript_text or None,
         "status":        status,
         "is_reviewed":   is_review_locked,
-        "ai_model":      "gemini-1.5-flash" if ai_result else None,
-        "ai_prompt_ver": "v1" if ai_result else None,
+        "ai_model":      "gemini-2.5-flash" if ai_result else None,
+        "ai_prompt_ver": "v3" if ai_result else None,
     }
 
     if ai_result:
@@ -106,27 +123,99 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
     return stream_id, is_review_locked
 
 
-def insert_chapters(client: Client, stream_id: str, chapters: list[dict]):
+def _chapter_base_row(stream_id: str, ch: dict, sort_order: int, start_sec: int) -> dict:
+    return {
+        "stream_id":          stream_id,
+        "start_sec":          start_sec,
+        "end_sec":            ch.get("end_sec"),
+        "title":              ch.get("title", ""),
+        "summary":            ch.get("summary"),
+        "transcript_segment": ch.get("transcript_segment"),
+        "sort_order":         sort_order,
+    }
+
+
+def _coerce_start_sec(value: object) -> int:
+    if value is None or value == "":
+        return 0
+    return int(float(value))
+
+
+def _build_legacy_chapter_rows(stream_id: str, chapters: list[dict]) -> list[dict]:
+    rows = []
+    for i, ch in enumerate(chapters):
+        row = _chapter_base_row(stream_id, ch, i, _coerce_start_sec(ch.get("start_sec", 0)))
+        row["snap_status"] = "legacy"
+        rows.append(row)
+    return rows
+
+
+def _rpc_scalar(client: Client, fn: str, params: dict):
+    resp = client.rpc(fn, params).execute()
+    if resp.data is None:
+        raise ValueError(f"rpc returned null: {fn} params={params}")
+    return resp.data
+
+
+def _build_snapped_chapter_rows(client: Client, stream_id: str, chapters: list[dict], snapshot_id: str) -> list[dict]:
+    rows = []
+    for i, ch in enumerate(chapters):
+        ai_start_sec = _coerce_start_sec(ch.get("start_sec", 0))
+
+        snippet_index = int(_rpc_scalar(client, "transcript_snapshot_nearest_snippet_index", {
+            "p_snapshot_id": snapshot_id,
+            "p_target_sec": float(ai_start_sec),
+        }))
+        start_sec = int(_rpc_scalar(client, "transcript_snapshot_start_sec", {
+            "p_snapshot_id": snapshot_id,
+            "p_snippet_index": snippet_index,
+        }))
+        snap_delta_sec = abs(ai_start_sec - start_sec)
+        snap_status = str(_rpc_scalar(client, "derive_snap_status", {
+            "p_snap_delta_sec": snap_delta_sec,
+        }))
+
+        if snap_status == "drop":
+            logger.warning(
+                f"chapter dropped: title={ch.get('title')} ai_start_sec={ai_start_sec} delta={snap_delta_sec}"
+            )
+            continue
+
+        row = _chapter_base_row(stream_id, ch, i, start_sec)
+        row.update({
+            "snapshot_id":    snapshot_id,
+            "snippet_index":  snippet_index,
+            "ai_start_sec":   ai_start_sec,
+            "snap_delta_sec": snap_delta_sec,
+            "snap_status":    snap_status,
+        })
+        rows.append(row)
+
+    return rows
+
+
+def insert_chapters(client: Client, stream_id: str, chapters: list[dict], snapshot_id: Optional[str] = None):
     if not chapters:
         return
 
     # 既存チャプターを削除してから再挿入
     client.table("chapters").delete().eq("stream_id", stream_id).execute()
 
-    rows = []
-    for i, ch in enumerate(chapters):
-        rows.append({
-            "stream_id":          stream_id,
-            "start_sec":          ch.get("start_sec", 0),
-            "end_sec":            ch.get("end_sec"),
-            "title":              ch.get("title", ""),
-            "summary":            ch.get("summary"),
-            "transcript_segment": ch.get("transcript_segment"),
-            "sort_order":         i,
-        })
+    if snapshot_id:
+        try:
+            rows = _build_snapped_chapter_rows(client, stream_id, chapters, snapshot_id)
+        except Exception as exc:
+            logger.warning(f"chapter snap 失敗。legacy で継続: stream_id={stream_id} snapshot_id={snapshot_id} error={exc}")
+            rows = _build_legacy_chapter_rows(stream_id, chapters)
+    else:
+        rows = _build_legacy_chapter_rows(stream_id, chapters)
+
+    if not rows:
+        logger.info(f"chapters 挿入対象なし: stream_id={stream_id}")
+        return
 
     client.table("chapters").insert(rows).execute()
-    logger.info(f"chapters {len(rows)} 件を挿入: stream_id={stream_id}")
+    logger.info(f"chapters {len(rows)} 件を挿入: stream_id={stream_id} snapshot_id={snapshot_id or 'legacy'}")
 
 
 def update_view_count_7d(client: Client, video_meta: dict):

@@ -123,7 +123,6 @@ def transcribe_and_store(supabase_client, video_id: str, dry_run: bool = False) 
     Whisper で文字起こしして Supabase を更新し、AI 要約まで実行する。
     worker.py の whisper_transcribe ジョブから呼び出される。
     """
-    from batch_runner import process_video
     from fetch_new_videos import _fetch_video_details, get_youtube_client
     from summarize import get_gemini_client
 
@@ -143,9 +142,9 @@ def transcribe_and_store(supabase_client, video_id: str, dry_run: bool = False) 
     gemini = get_gemini_client()
 
     # transcript 取得済みとして TranscriptResult を組み立てて再利用
-    from get_transcript import TranscriptResult, build_timestamped_text
+    from get_transcript import build_timestamped_text
     from summarize import summarize
-    from store import upsert_stream, insert_chapters
+    from store import upsert_stream, insert_chapters, save_transcript_snapshot
 
     timestamped_text = build_timestamped_text(snippets)
     ai_result = summarize(timestamped_text, model=gemini)
@@ -158,7 +157,14 @@ def transcribe_and_store(supabase_client, video_id: str, dry_run: bool = False) 
         ai_result=ai_result,
     )
 
+    snapshot_id = None
+    if snippets:
+        try:
+            snapshot_id = save_transcript_snapshot(supabase_client, stream_id, "whisper", snippets)
+        except Exception as e:
+            logger.warning(f"[{video_id}] snapshot 保存失敗: {e}")
+
     if not is_review_locked and ai_result and ai_result.get("chapters"):
-        insert_chapters(supabase_client, stream_id, ai_result["chapters"])
+        insert_chapters(supabase_client, stream_id, ai_result["chapters"], snapshot_id=snapshot_id)
 
     logger.info(f"[{video_id}] whisper_transcribe 完了: stream_id={stream_id}")

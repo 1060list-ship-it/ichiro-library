@@ -4,6 +4,7 @@
 使い方:
   python reprocess_videos.py                    # 全動画を再処理
   python reprocess_videos.py --no-summary-only  # 要約なし動画のみ（Gemini上限回復後のバックフィル用）
+  python reprocess_videos.py --recent-first     # 最新配信から再処理
   python reprocess_videos.py --dry-run          # 確認のみ
   python reprocess_videos.py --video VIDEO_ID   # 特定動画のみ
 """
@@ -19,7 +20,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 
 from get_transcript import get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
-from store import get_supabase_client, insert_chapters
+from store import get_supabase_client, insert_chapters, save_transcript_snapshot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,13 +39,24 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = Fals
         logger.info(f"[{video_id}] レビュー済みのため再処理をスキップ")
         return
 
-    if not transcript_text:
-        logger.warning(f"[{video_id}] 字幕なし、スキップ")
-        return
+    transcript_result = get_transcript(video_id)
+    snapshot_id = None
 
-    # タイムスタンプ付きテキストに変換できないのでそのまま渡す
-    # 既存データはスニペット形式ではなくプレーンテキストで保存されているため
-    ai_result = summarize(transcript_text, model=gemini)
+    if transcript_result.source == "failed" or not transcript_result.snippets:
+        if not transcript_text:
+            logger.warning(f"[{video_id}] 字幕なし、スキップ")
+            return
+        ai_result = summarize(transcript_text, model=gemini)
+    else:
+        timestamped_text = build_timestamped_text(transcript_result.snippets)
+        if not timestamped_text:
+            if not transcript_text:
+                logger.warning(f"[{video_id}] 字幕テキスト空、スキップ")
+                return
+            ai_result = summarize(transcript_text, model=gemini)
+        else:
+            ai_result = summarize(timestamped_text, model=gemini)
+
     if not ai_result:
         logger.warning(f"[{video_id}] AI再処理失敗")
         return
@@ -52,7 +64,20 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = Fals
     logger.info(f"[{video_id}] corner_names={ai_result.get('corner_names')} songs={ai_result.get('songs')} topics={ai_result.get('talk_topics')}")
 
     if dry_run:
+        logger.info(f"[{video_id}] summary={ai_result.get('summary', '')[:60]}...")
         return
+
+    if transcript_result.source != "failed" and transcript_result.snippets:
+        try:
+            snapshot_id = save_transcript_snapshot(
+                supabase,
+                stream_id,
+                transcript_result.source,
+                transcript_result.snippets,
+            )
+        except Exception as e:
+            logger.warning(f"[{video_id}] snapshot 保存失敗: {e}")
+            snapshot_id = None
 
     supabase.table("streams").update({
         "summary":        ai_result.get("summary"),
@@ -68,24 +93,29 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = Fals
 
     chapters = ai_result.get("chapters", [])
     if chapters:
-        insert_chapters(supabase, stream_id, chapters)
+        insert_chapters(supabase, stream_id, chapters, snapshot_id=snapshot_id)
 
     logger.info(f"[{video_id}] 更新完了")
 
 
-def run(dry_run: bool = False, target_video_id: str = None, no_summary_only: bool = False):
+def run(
+    dry_run: bool = False,
+    target_video_id: str = None,
+    no_summary_only: bool = False,
+    recent_first: bool = False,
+):
     supabase = get_supabase_client()
     gemini = get_gemini_client()
 
+    query = supabase.table("streams").select("id,video_id,transcript,is_reviewed,status,stream_date")
     if target_video_id:
-        resp = supabase.table("streams").select("*").eq("video_id", target_video_id).execute()
+        query = query.eq("video_id", target_video_id)
     elif no_summary_only:
-        resp = supabase.table("streams").select("*").is_("summary", "null").order("stream_date").execute()
+        query = query.is_("summary", "null")
         logger.info("モード: 要約なし動画のみ")
-    else:
-        resp = supabase.table("streams").select("*").execute()
 
-    rows = resp.data or []
+    rows = query.order("stream_date", desc=recent_first).execute().data or []
+
     total = len(rows)
     logger.info(f"再処理対象: {total}件")
 
@@ -112,5 +142,11 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--video", type=str, help="特定の動画IDのみ再処理")
     parser.add_argument("--no-summary-only", action="store_true", help="要約なし動画のみ再処理（Gemini上限回復後のバックフィル用）")
+    parser.add_argument("--recent-first", action="store_true", help="最新配信から再処理（7月リプロセス用）")
     args = parser.parse_args()
-    run(dry_run=args.dry_run, target_video_id=args.video, no_summary_only=args.no_summary_only)
+    run(
+        dry_run=args.dry_run,
+        target_video_id=args.video,
+        no_summary_only=args.no_summary_only,
+        recent_first=args.recent_first,
+    )

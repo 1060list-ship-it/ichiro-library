@@ -28,8 +28,24 @@ function HomeContent() {
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
   const [debouncedQuery, setDebouncedQuery] = useState(() => searchParams.get('q') ?? '')
   const [fuzzy, setFuzzy] = useState(() => searchParams.get('fuzzy') === '1')
+  const [year, setYear] = useState<number | null>(() => {
+    const y = searchParams.get('year')
+    return y ? parseInt(y, 10) : null
+  })
+  const [availableYears, setAvailableYears] = useState<number[]>([])
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
+
+  // 利用可能な年一覧をDBから取得
+  useEffect(() => {
+    supabase.from('streams').select('stream_date').not('stream_date', 'is', null)
+      .then(({ data }) => {
+        if (!data) return
+        const years = [...new Set((data as { stream_date: string }[]).map(r => new Date(r.stream_date).getFullYear()))]
+          .sort((a, b) => b - a)
+        setAvailableYears(years)
+      })
+  }, [])
 
   // URLクエリパラメータに状態を同期（ブラウザバックで検索を復元するため）
   useEffect(() => {
@@ -37,9 +53,10 @@ function HomeContent() {
     if (query) params.set('q', query)
     if (view !== 'top') params.set('view', view)
     if (fuzzy) params.set('fuzzy', '1')
+    if (year !== null) params.set('year', String(year))
     const qs = params.toString()
     router.replace(qs ? `?${qs}` : '/', { scroll: false })
-  }, [query, view, fuzzy, router])
+  }, [query, view, fuzzy, year, router])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 400)
@@ -49,6 +66,11 @@ function HomeContent() {
   const fetchStreams = useCallback(async () => {
     setLoading(true)
     let data: Stream[] = []
+
+    const yearFrom = year !== null ? `${year}-01-01` : null
+    const yearTo   = year !== null ? `${year + 1}-01-01` : null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const yd = (q: any) => yearFrom ? q.gte('stream_date', yearFrom).lt('stream_date', yearTo) : q
 
     if (debouncedQuery.trim()) {
       const parts = debouncedQuery.trim().split(/\s+/).filter(Boolean)
@@ -61,10 +83,14 @@ function HomeContent() {
           query: includes.join(' ') || debouncedQuery,
           sort_by: 'date_desc',
           page_num: 1,
-          page_size: 20,
+          page_size: 50,
         })
-        const results = (res.data ?? []) as Stream[]
-        // fuzzyは後段でJS除外
+        let results = (res.data ?? []) as Stream[]
+        if (yearFrom) {
+          results = results.filter(s =>
+            s.stream_date >= yearFrom && s.stream_date < yearTo!
+          )
+        }
         data = excludes.length > 0
           ? results.filter(s => excludes.every(ex =>
               !s.title?.toLowerCase().includes(ex.toLowerCase()) &&
@@ -78,7 +104,7 @@ function HomeContent() {
           const textConds = includes.flatMap(kw =>
             [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
           ).join(',')
-          let q = supabase.from('streams').select('*').or(textConds)
+          let q = yd(supabase.from('streams').select('*').or(textConds))
           for (const ex of excludes) {
             q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
           }
@@ -107,7 +133,7 @@ function HomeContent() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const streamIds = (seRes.data ?? []).map((r: any) => r.stream_id)
           if (streamIds.length > 0) {
-            let q = supabase.from('streams').select('*').in('id', streamIds)
+            let q = yd(supabase.from('streams').select('*').in('id', streamIds))
             for (const ex of excludes) {
               q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
             }
@@ -125,36 +151,36 @@ function HomeContent() {
         })
       }
     } else if (view === 'top') {
-      const res = await supabase.from('streams').select('*')
-        .order('stream_date', { ascending: false }).limit(10)
+      const res = await yd(supabase.from('streams').select('*'))
+        .order('stream_date', { ascending: false }).limit(year ? 20 : 10)
       data = res.data ?? []
     } else if (view === 'ranking-view') {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === 'ranking-waiwai') {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .not('comment_count', 'is', null)
         .order('comment_count', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === '歌唱あり') {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .eq('has_live_singing', true)
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === 'ゲーム実況') {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .ilike('title', '%ゲーム中%')
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === '未知との遭遇') {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .contains('corner_names', ['未知との遭遇'])
         .not('title', 'ilike', '%ゲーム中%')
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else {
-      const res = await supabase.from('streams').select('*')
+      const res = await yd(supabase.from('streams').select('*'))
         .contains('corner_names', [view])
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
@@ -162,7 +188,7 @@ function HomeContent() {
 
     setStreams(data)
     setLoading(false)
-  }, [view, debouncedQuery, fuzzy])
+  }, [view, debouncedQuery, fuzzy, year])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -212,6 +238,36 @@ function HomeContent() {
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
         <SearchBar value={query} onChange={setQuery} fuzzy={fuzzy} onFuzzyChange={setFuzzy} />
+
+        {/* 年フィルター */}
+        {availableYears.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs text-gray-500 flex-shrink-0">期間：</span>
+            <button
+              onClick={() => setYear(null)}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                year === null
+                  ? 'bg-indigo-600 text-white font-semibold'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              全期間
+            </button>
+            {availableYears.map(y => (
+              <button
+                key={y}
+                onClick={() => setYear(year === y ? null : y)}
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                  year === y
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {y}年
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 検索ガイド */}
         <div>
@@ -271,7 +327,11 @@ function HomeContent() {
           )}
           <div>
             <h2 className="text-sm font-semibold text-gray-300">
-              {isSearching ? `「${debouncedQuery}」の検索結果` : view === 'top' ? '最近の配信' : currentLabel}
+              {isSearching
+                ? `「${debouncedQuery}」の検索結果${year ? ` (${year}年)` : ''}`
+                : view === 'top'
+                  ? year ? `${year}年の配信` : '最近の配信'
+                  : `${currentLabel}${year ? ` (${year}年)` : ''}`}
             </h2>
             {!isSearching && view !== 'top' && currentDescription && (
               <p className="text-xs text-gray-500 mt-0.5">{currentDescription}</p>
@@ -297,6 +357,10 @@ function HomeContent() {
       <footer className="border-t border-gray-800 mt-12 px-4 py-6 text-center text-xs text-gray-500">
         <p>管理者: <a href="https://x.com/ikki_i" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 underline">ikki</a></p>
         <p className="mt-1">非公式ファンサイト。サカナクション・山口一郎とは無関係です。</p>
+        <p className="mt-2 flex justify-center gap-4">
+          <Link href="/about" className="hover:text-gray-300 underline">このサービスについて</Link>
+          <Link href="/privacy" className="hover:text-gray-300 underline">プライバシーポリシー</Link>
+        </p>
       </footer>
     </main>
   )

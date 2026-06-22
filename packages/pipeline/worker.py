@@ -95,7 +95,7 @@ def mark_job_failed(client, job_id: str, error_msg: str):
     )
 
 
-def run_job(job: Dict[str, Any], dry_run: bool = False):
+def run_job(client, job: Dict[str, Any], dry_run: bool = False):
     kind = job["kind"]
     payload = job.get("payload") or {}
     video_id = job.get("video_id")
@@ -111,7 +111,8 @@ def run_job(job: Dict[str, Any], dry_run: bool = False):
         return
 
     if kind == "reprocess":
-        run_reprocess(dry_run=dry_run)
+        recent_first = bool(payload.get("recent_first", False))
+        run_reprocess(dry_run=dry_run, recent_first=recent_first)
         return
 
     if kind == "reprocess_single":
@@ -235,7 +236,7 @@ def main(dry_run: bool = False) -> int:
         return 0
 
     try:
-        run_job(job, dry_run=dry_run)
+        run_job(client, job, dry_run=dry_run)
         mark_job_done(client, job["id"])
         logger.info("job done: %s", job["id"])
     except Exception as exc:

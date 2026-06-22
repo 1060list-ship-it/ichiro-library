@@ -28,7 +28,16 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 from fetch_new_videos import get_youtube_client, get_channel_id, fetch_live_archives, fetch_all_live_archives_via_playlist, filter_new_videos, _fetch_video_details
 from get_transcript import get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
-from store import get_supabase_client, get_existing_video_ids, upsert_stream, insert_chapters, update_view_count_7d, get_transcript_retry_count, queue_pipeline_job
+from store import (
+    get_supabase_client,
+    get_existing_video_ids,
+    upsert_stream,
+    insert_chapters,
+    save_transcript_snapshot,
+    update_view_count_7d,
+    get_transcript_retry_count,
+    queue_pipeline_job,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,10 +78,22 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
         ai_result=ai_result,
     )
 
+    snapshot_id = None
+    if transcript_result.source != "failed" and transcript_result.snippets:
+        try:
+            snapshot_id = save_transcript_snapshot(
+                supabase_client,
+                stream_id,
+                transcript_result.source,
+                transcript_result.snippets,
+            )
+        except Exception as e:
+            logger.warning(f"[{video_id}] snapshot 保存失敗（章は legacy で継続）: {e}")
+
     if is_review_locked:
         logger.info(f"[{video_id}] レビュー済みのためチャプター更新をスキップ")
     elif ai_result and ai_result.get("chapters"):
-        insert_chapters(supabase_client, stream_id, ai_result["chapters"])
+        insert_chapters(supabase_client, stream_id, ai_result["chapters"], snapshot_id=snapshot_id)
 
     logger.info(f"=== 処理完了: {video_id} ===")
 
