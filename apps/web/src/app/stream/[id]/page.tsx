@@ -21,15 +21,13 @@ function HighlightList({ highlights, videoId, entities }: { highlights: Highligh
     <div className="bg-gray-900 rounded-lg overflow-hidden">
       <div className="flex items-baseline gap-2 px-4 pt-4 pb-2">
         <p className="text-xs text-gray-500 font-medium">盛り上がり</p>
-        <p className="text-xs text-gray-600">※ 30秒前から再生</p>
       </div>
       <div className="divide-y divide-gray-800">
         {highlights.map((h, i) => {
           const mm = Math.floor(h.start_sec / 60)
           const ss = h.start_sec % 60
           const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
-          const linkSec = Math.max(0, h.start_sec - 30)
-          const url = `https://www.youtube.com/watch?v=${videoId}&t=${linkSec}`
+          const url = `https://www.youtube.com/watch?v=${videoId}&t=${h.start_sec}`
           return (
             <div key={i}
               className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
