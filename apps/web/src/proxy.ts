@@ -1,8 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-const LEGACY_ADMIN_COOKIE_NAME = 'ichiro-library-admin'
-
 // auth.ts の SAFE_RETURN_TO_PATTERN と同一。proxy は Edge Runtime のため import 不可。
 const SAFE_RETURN_TO_PATTERN = /^\/(?![\/\\])[\x20-\x5B\x5D-\x7E]*$/
 
@@ -17,20 +15,19 @@ function hasSupabaseAuthCookie(cookies: { name: string; value: string }[]) {
 
 export default async function proxy(request: NextRequest) {
   const allCookies = request.cookies.getAll().map(({ name, value }) => ({ name, value }))
-  const hasLegacyAdminCookie = request.cookies.has(LEGACY_ADMIN_COOKIE_NAME)
   const hasSessionCookie = hasSupabaseAuthCookie(allCookies)
 
   const isMemberPath =
     request.nextUrl.pathname === '/member' || request.nextUrl.pathname.startsWith('/member/')
   const isLoginPath = request.nextUrl.pathname === '/login'
 
-  if (isMemberPath && !hasLegacyAdminCookie && !hasSessionCookie) {
+  if (isMemberPath && !hasSessionCookie) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('return', `${request.nextUrl.pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(loginUrl)
   }
 
-  if (isLoginPath && (hasLegacyAdminCookie || hasSessionCookie)) {
+  if (isLoginPath && hasSessionCookie) {
     const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('return'))
     return NextResponse.redirect(new URL(returnTo, request.url))
   }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { checkAdminSession, fetchAdminEntity, fetchAdminEntityStreams } from '../../actions'
+import { requireRole } from '@/lib/auth'
+import { fetchAdminEntity, fetchAdminEntityStreams } from '../../actions'
 import EntityEditorClient from './EntityEditorClient'
 
 type PageProps = {
@@ -8,8 +9,14 @@ type PageProps = {
 }
 
 export default async function AdminEntityEditPage({ params, searchParams }: PageProps) {
-  const authenticated = await checkAdminSession()
-  if (!authenticated) redirect('/admin')
+  try {
+    await requireRole(['admin'])
+  } catch (error) {
+    if (error instanceof Error && (error.message === 'Unauthorized' || error.message === 'Forbidden')) {
+      redirect('/login?return=/admin/entity')
+    }
+    throw error
+  }
 
   const { id } = await params
   const isNew = id === 'new'

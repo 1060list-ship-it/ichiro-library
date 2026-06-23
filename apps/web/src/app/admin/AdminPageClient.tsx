@@ -14,7 +14,6 @@ import {
   searchAdminStreams,
   setAdminStreamReviewed,
 } from './actions'
-import { useAdminAuth } from './useAdminAuth'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ja-JP', {
@@ -247,9 +246,7 @@ function JobTable({
   )
 }
 
-export default function AdminPageClient() {
-  const { ready, authenticated, submitting, error, login, logout } = useAdminAuth()
-  const [password, setPassword] = useState('')
+export default function AdminPageClient({ logoutAction }: { logoutAction: () => Promise<void> }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null)
@@ -315,37 +312,20 @@ export default function AdminPageClient() {
   }, [])
 
   useEffect(() => {
-    if (!ready || !authenticated) {
-      return
-    }
-
     queueMicrotask(() => {
       void loadDashboardData()
       void loadInitialStreams()
       void loadJobs()
     })
-  }, [authenticated, loadDashboardData, loadInitialStreams, loadJobs, ready])
+  }, [loadDashboardData, loadInitialStreams, loadJobs])
 
   useEffect(() => {
-    if (!ready || !authenticated) {
-      return
-    }
-
     const intervalId = window.setInterval(() => {
       void loadJobs()
     }, 30_000)
 
     return () => window.clearInterval(intervalId)
-  }, [authenticated, loadJobs, ready])
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const ok = await login(password)
-    if (ok) {
-      setPassword('')
-    }
-  }
+  }, [loadJobs])
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -479,51 +459,6 @@ export default function AdminPageClient() {
     }
   }
 
-  if (!ready) {
-    return (
-      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <p className="text-sm text-gray-500">認証状態を確認しています...</p>
-      </main>
-    )
-  }
-
-  if (!authenticated) {
-    return (
-      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center px-6">
-        <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-6">
-          <h1 className="text-lg font-semibold">管理画面</h1>
-          <p className="mt-2 text-sm text-gray-400">閲覧・編集には管理者パスワードが必要です。</p>
-
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="admin-password" className="block text-sm text-gray-300">
-                パスワード
-              </label>
-              <input
-                id="admin-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
-                autoComplete="current-password"
-              />
-            </div>
-
-            {error && <p className="text-sm text-red-400">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={submitting || password.length === 0}
-              className="w-full rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-950 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-            >
-              {submitting ? '認証中...' : 'ログイン'}
-            </button>
-          </form>
-        </div>
-      </main>
-    )
-  }
-
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <header className="border-b border-gray-800">
@@ -532,13 +467,14 @@ export default function AdminPageClient() {
             <h1 className="text-lg font-semibold">ichiro library 管理画面</h1>
             <p className="mt-1 text-sm text-gray-400">配信メタデータの確認と手動修正</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-500 hover:text-white"
-          >
-            ログアウト
-          </button>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-500 hover:text-white"
+            >
+              ログアウト
+            </button>
+          </form>
         </div>
       </header>
 

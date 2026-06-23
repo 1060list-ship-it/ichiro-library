@@ -18,7 +18,6 @@ import {
   scrutinizeStreamSummary,
   updateAdminStream,
 } from '../../actions'
-import { useAdminAuth } from '../../useAdminAuth'
 
 type Props = {
   videoId: string
@@ -158,8 +157,6 @@ function TextField({
 
 export default function StreamEditorClient({ videoId }: Props) {
   const router = useRouter()
-  const { ready, authenticated, submitting, error, login } = useAdminAuth()
-  const [password, setPassword] = useState('')
   const [stream, setStream] = useState<AdminEditableStream | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [chapters, setChapters] = useState<EditableChapter[]>([])
@@ -192,10 +189,6 @@ export default function StreamEditorClient({ videoId }: Props) {
   }, [reprocessMessage])
 
   useEffect(() => {
-    if (!ready || !authenticated) {
-      return
-    }
-
     let active = true
 
     async function load() {
@@ -246,16 +239,7 @@ export default function StreamEditorClient({ videoId }: Props) {
     return () => {
       active = false
     }
-  }, [ready, authenticated, videoId])
-
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const ok = await login(password)
-    if (ok) {
-      setPassword('')
-    }
-  }
+  }, [videoId])
 
   function toggleCornerName(cornerName: string) {
     if (!form) return
@@ -448,51 +432,6 @@ export default function StreamEditorClient({ videoId }: Props) {
     } finally {
       setReprocessing(false)
     }
-  }
-
-  if (!ready) {
-    return (
-      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <p className="text-sm text-gray-500">認証状態を確認しています...</p>
-      </main>
-    )
-  }
-
-  if (!authenticated) {
-    return (
-      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center px-6">
-        <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-6">
-          <h1 className="text-lg font-semibold">動画編集</h1>
-          <p className="mt-2 text-sm text-gray-400">編集には管理者パスワードが必要です。</p>
-
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="stream-admin-password" className="block text-sm text-gray-300">
-                パスワード
-              </label>
-              <input
-                id="stream-admin-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
-                autoComplete="current-password"
-              />
-            </div>
-
-            {error && <p className="text-sm text-red-400">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={submitting || password.length === 0}
-              className="w-full rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-950 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-            >
-              {submitting ? '認証中...' : 'ログイン'}
-            </button>
-          </form>
-        </div>
-      </main>
-    )
   }
 
   return (

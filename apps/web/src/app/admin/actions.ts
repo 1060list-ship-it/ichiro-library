@@ -1,13 +1,18 @@
 'use server'
 
-import { createHash } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
-import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Highlight, Stream } from '@/lib/types'
 
-const ADMIN_COOKIE_NAME = 'ichiro-library-admin'
+export async function logoutAction() {
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.auth.signOut()
+  if (error) throw new Error(`Logout failed: ${error.message}`)
+  redirect('/')
+}
 
 export type AdminDashboardData = {
   summary: {
@@ -142,23 +147,6 @@ function isMissingLiveViewingColumn(error: unknown) {
   return message.includes('has_live_viewing')
 }
 
-function getAdminPassword() {
-  const password = process.env.ADMIN_PASSWORD
-
-  if (!password) {
-    throw new Error('ADMIN_PASSWORD が未設定です')
-  }
-
-  return password
-}
-
-function getAdminCookieValue() {
-  return createHash('sha256')
-    .update(`ichiro-library:${getAdminPassword()}`)
-    .digest('hex')
-}
-
-
 function normalizeCsv(value: string) {
   const items = value
     .split(',')
@@ -200,32 +188,6 @@ function toEditableStreamWithoutLiveViewing(
     has_live_viewing: stream.has_live_viewing ?? null,
     supportsLiveViewing: false,
   })
-}
-
-export async function verifyAdminPassword(password: string) {
-  if (password !== getAdminPassword()) {
-    return { ok: false as const, message: 'パスワードが違います。' }
-  }
-
-  const cookieStore = await cookies()
-  cookieStore.set(ADMIN_COOKIE_NAME, getAdminCookieValue(), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  })
-
-  return { ok: true as const }
-}
-
-export async function checkAdminSession() {
-  const cookieStore = await cookies()
-  return cookieStore.get(ADMIN_COOKIE_NAME)?.value === getAdminCookieValue()
-}
-
-export async function clearAdminSession() {
-  const cookieStore = await cookies()
-  cookieStore.delete(ADMIN_COOKIE_NAME)
 }
 
 export async function fetchAdminDashboard(): Promise<AdminDashboardData> {

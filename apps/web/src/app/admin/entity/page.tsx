@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { checkAdminSession, fetchAdminEntities } from '../actions'
+import { requireRole } from '@/lib/auth'
+import { fetchAdminEntities } from '../actions'
 import type { AdminEntity } from '../actions'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -18,8 +19,14 @@ function categoryLabel(category: string): string {
 }
 
 export default async function AdminEntityPage() {
-  const authenticated = await checkAdminSession()
-  if (!authenticated) redirect('/admin')
+  try {
+    await requireRole(['admin'])
+  } catch (error) {
+    if (error instanceof Error && (error.message === 'Unauthorized' || error.message === 'Forbidden')) {
+      redirect('/login?return=/admin/entity')
+    }
+    throw error
+  }
 
   const entities = await fetchAdminEntities()
 

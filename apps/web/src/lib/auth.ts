@@ -1,55 +1,21 @@
 import 'server-only'
 
-import { createHash } from 'node:crypto'
 import { cache } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabaseAdmin } from './supabase-admin'
 import { createSupabaseServerClient } from './supabase-server'
 import type { UserRole } from './types'
 
-const ADMIN_COOKIE_NAME = 'ichiro-library-admin'
 const SAFE_RETURN_TO_PATTERN = /^\/(?![\/\\])[\x20-\x5B\x5D-\x7E]*$/
 
 type VerifiedSession = {
   user: User
 }
 
-export type RequireRoleResult =
-  | {
-      user: User
-      role: UserRole
-      isLegacyBridge: false
-    }
-  | {
-      user: null
-      role: 'admin'
-      isLegacyBridge: true
-    }
-
-function getLegacyAdminCookieValue() {
-  const password = process.env.ADMIN_PASSWORD
-
-  if (!password) {
-    return null
-  }
-
-  return createHash('sha256')
-    .update(`ichiro-library:${password}`)
-    .digest('hex')
+export type RequireRoleResult = {
+  user: User
+  role: UserRole
 }
-
-const hasLegacyAdminSession = cache(async () => {
-  const expectedCookieValue = getLegacyAdminCookieValue()
-
-  if (!expectedCookieValue) {
-    return false
-  }
-
-  const { cookies } = await import('next/headers')
-  const cookieStore = await cookies()
-
-  return cookieStore.get(ADMIN_COOKIE_NAME)?.value === expectedCookieValue
-})
 
 export const verifySession = cache(async (): Promise<VerifiedSession | null> => {
   const supabase = await createSupabaseServerClient()
@@ -99,21 +65,7 @@ export async function requireRole(rolesAllowed: UserRole[]): Promise<RequireRole
   ])
 
   if (session && role && rolesAllowed.includes(role)) {
-    return {
-      user: session.user,
-      role,
-      isLegacyBridge: false,
-    }
-  }
-
-  if (!session && rolesAllowed.length === 1 && rolesAllowed[0] === 'admin' && await hasLegacyAdminSession()) {
-    console.warn('[auth-bridge] 旧 Cookie 認証フォールバック使用 userId=legacy-admin')
-
-    return {
-      user: null,
-      role: 'admin',
-      isLegacyBridge: true,
-    }
+    return { user: session.user, role }
   }
 
   if (!session) {
