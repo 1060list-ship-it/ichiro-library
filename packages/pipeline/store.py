@@ -255,6 +255,5 @@ def update_transcript(client: Client, video_id: str, transcript_text: str, sourc
     client.table("streams").update({
         "transcript": transcript_text,
         "status": "public",
-        "transcript_source_override": source,
     }).eq("video_id", video_id).execute()
     logger.info(f"[{video_id}] transcript 更新完了: source={source}")
