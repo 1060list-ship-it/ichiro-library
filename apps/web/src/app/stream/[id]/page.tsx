@@ -147,13 +147,13 @@ export default function StreamPage() {
           </div>
         )}
 
+        {/* チャプター */}
+        {chapters.length > 0 && <ChapterList chapters={chapters} videoId={stream.video_id} />}
+
         {/* 盛り上がり */}
         {stream.highlights && stream.highlights.length > 0 && (
           <HighlightList highlights={stream.highlights} videoId={stream.video_id} entities={entities} />
         )}
-
-        {/* チャプター */}
-        {chapters.length > 0 && <ChapterList chapters={chapters} videoId={stream.video_id} />}
       </div>
     </main>
   )
