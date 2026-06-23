@@ -1,18 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Highlight, Stream } from '@/lib/types'
 
-export async function logoutAction() {
-  const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.auth.signOut()
-  if (error) throw new Error(`Logout failed: ${error.message}`)
-  redirect('/')
-}
+export { logoutAction } from '@/lib/auth-actions'
 
 export type AdminDashboardData = {
   summary: {

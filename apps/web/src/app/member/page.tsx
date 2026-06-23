@@ -1,24 +1,10 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import { requireRole } from '@/lib/auth'
+import { requireRoleOrRedirect } from '@/lib/auth'
 import { logoutAction } from './actions'
 import MemberPageClient from './MemberPageClient'
 
 export default async function MemberPage() {
-  let session
-
-  try {
-    session = await requireRole(['editor', 'admin'])
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === 'Unauthorized' || error.message === 'Forbidden')
-    ) {
-      redirect('/login?return=/member')
-    }
-
-    throw error
-  }
+  const session = await requireRoleOrRedirect(['editor', 'admin'], '/member')
 
   const email = session.user?.email ?? 'unknown'
 

@@ -313,9 +313,7 @@ export default function AdminPageClient({ logoutAction }: { logoutAction: () => 
 
   useEffect(() => {
     queueMicrotask(() => {
-      void loadDashboardData()
-      void loadInitialStreams()
-      void loadJobs()
+      void Promise.all([loadDashboardData(), loadInitialStreams(), loadJobs()])
     })
   }, [loadDashboardData, loadInitialStreams, loadJobs])
 

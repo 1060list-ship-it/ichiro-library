@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabaseAdmin } from './supabase-admin'
@@ -73,6 +74,20 @@ export async function requireRole(rolesAllowed: UserRole[]): Promise<RequireRole
   }
 
   throw new Error('Forbidden')
+}
+
+export async function requireRoleOrRedirect(
+  rolesAllowed: UserRole[],
+  returnTo: string,
+): Promise<RequireRoleResult> {
+  try {
+    return await requireRole(rolesAllowed)
+  } catch (error) {
+    if (error instanceof Error && (error.message === 'Unauthorized' || error.message === 'Forbidden')) {
+      redirect('/login?return=' + returnTo)
+    }
+    throw error
+  }
 }
 
 export function isSafeReturnTo(returnTo: string) {
