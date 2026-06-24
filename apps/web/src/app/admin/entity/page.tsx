@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { requireRoleOrRedirect } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { requireRole } from '@/lib/auth'
 import { fetchAdminEntities } from '../actions'
 import type { AdminEntity } from '../actions'
 
@@ -18,7 +19,14 @@ function categoryLabel(category: string): string {
 }
 
 export default async function AdminEntityPage() {
-  await requireRoleOrRedirect(['admin'], '/admin/entity')
+  try {
+    await requireRole(['admin'])
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      redirect('/login?return=/admin/entity')
+    }
+    throw error
+  }
 
   const entities = await fetchAdminEntities()
 

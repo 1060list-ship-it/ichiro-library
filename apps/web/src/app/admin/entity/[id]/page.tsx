@@ -1,4 +1,5 @@
-import { requireRoleOrRedirect } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { requireRole } from '@/lib/auth'
 import { fetchAdminEntity, fetchAdminEntityStreams } from '../../actions'
 import EntityEditorClient from './EntityEditorClient'
 
@@ -8,7 +9,14 @@ type PageProps = {
 }
 
 export default async function AdminEntityEditPage({ params, searchParams }: PageProps) {
-  await requireRoleOrRedirect(['admin'], '/admin/entity')
+  try {
+    await requireRole(['admin'])
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      redirect('/login?return=/admin')
+    }
+    throw error
+  }
 
   const { id } = await params
   const isNew = id === 'new'
