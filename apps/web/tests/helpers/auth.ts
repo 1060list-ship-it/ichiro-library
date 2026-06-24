@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from '@playwright/test'
 import { getTestEnv, type TestEnv } from './env'
 
-export type TestRole = 'editor' | 'admin'
+export type TestRole = 'editor' | 'admin' | 'revoked'
 
 const APP_BASE_URL = 'http://localhost:3000'
 
@@ -28,6 +28,13 @@ function getRoleCredentials(env: TestEnv, role: TestRole) {
     return {
       email: env.adminEmail,
       password: env.adminPassword,
+    }
+  }
+
+  if (role === 'revoked') {
+    return {
+      email: env.revokedEmail,
+      password: env.revokedPassword,
     }
   }
 
@@ -147,4 +154,87 @@ export function getSupabaseAnonClient() {
 
 export async function getSupabaseRoleClient(role: TestRole) {
   return createSupabaseRoleClient(role)
+}
+
+export function getSupabaseServiceRoleClient() {
+  const env = requireTestEnv()
+
+  if (!env.serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required to use service-role test helpers.')
+  }
+
+  return createClient(env.supabaseUrl, env.serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
+
+export async function ensureRevokedUser() {
+  const env = requireTestEnv()
+  const service = getSupabaseServiceRoleClient()
+  const credentials = getRoleCredentials(env, 'revoked')
+  const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+
+  let userId = ''
+  const signInResult = await supabase.auth.signInWithPassword(credentials)
+  if (signInResult.error || !signInResult.data.user) {
+    const { data, error } = await service.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    })
+
+    if (error) {
+      throw new Error(`Failed to list users for revoked fixture: ${error.message}`)
+    }
+
+    const existingUser = data.users.find((user) => user.email === credentials.email)
+
+    if (existingUser) {
+      userId = existingUser.id
+      const { error: updateError } = await service.auth.admin.updateUserById(existingUser.id, {
+        password: credentials.password,
+        email_confirm: true,
+      })
+
+      if (updateError) {
+        throw new Error(`Failed to update revoked fixture user: ${updateError.message}`)
+      }
+    } else {
+      const { data: created, error: createError } = await service.auth.admin.createUser({
+        email: credentials.email,
+        password: credentials.password,
+        email_confirm: true,
+      })
+
+      if (createError || !created.user) {
+        throw new Error(`Failed to create revoked fixture user: ${createError?.message ?? 'unknown error'}`)
+      }
+
+      userId = created.user.id
+    }
+  } else {
+    userId = signInResult.data.user.id
+  }
+
+  const { error: deleteRoleError } = await service
+    .from('user_roles')
+    .delete()
+    .eq('user_id', userId)
+
+  if (deleteRoleError) {
+    throw new Error(`Failed to strip user_roles for revoked fixture: ${deleteRoleError.message}`)
+  }
+
+  return {
+    id: userId,
+    email: credentials.email,
+    password: credentials.password,
+  }
 }

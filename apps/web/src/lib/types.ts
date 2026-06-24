@@ -138,6 +138,12 @@ export type SearchStreamsArgs = {
   page_size?: number | null
 }
 
+export type EngagementRankingArgs = {
+  limit_n?: number | null
+  date_from?: string | null
+  date_to?: string | null
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -184,6 +190,10 @@ export type Database = {
       }
     }
     Functions: {
+      get_engagement_ranking: {
+        Args: EngagementRankingArgs
+        Returns: Stream[]
+      }
       search_streams: {
         Args: SearchStreamsArgs
         Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'has_live_viewing' | 'talk_topics' | 'highlights' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]

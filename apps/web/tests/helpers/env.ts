@@ -15,10 +15,13 @@ const REQUIRED_KEYS = [
 export type TestEnv = {
   supabaseUrl: string
   supabaseAnonKey: string
+  serviceRoleKey?: string
   editorEmail: string
   editorPassword: string
   adminEmail: string
   adminPassword: string
+  revokedEmail: string
+  revokedPassword: string
 }
 
 let envLoaded = false
@@ -97,9 +100,12 @@ export function getTestEnv(): TestEnv | null {
   return {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
     supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     editorEmail: process.env.TEST_EDITOR_EMAIL!,
     editorPassword: process.env.TEST_EDITOR_PASSWORD!,
     adminEmail: process.env.TEST_ADMIN_EMAIL!,
     adminPassword: process.env.TEST_ADMIN_PASSWORD!,
+    revokedEmail: process.env.TEST_REVOKED_EMAIL ?? 'revoked-e2e@example.com',
+    revokedPassword: process.env.TEST_REVOKED_PASSWORD ?? 'RevokedUser123!',
   }
 }

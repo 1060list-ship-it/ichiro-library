@@ -159,9 +159,11 @@ function HomeContent() {
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === 'ranking-waiwai') {
-      const res = await yd(supabase.from('streams').select('*'))
-        .not('comment_count', 'is', null)
-        .order('comment_count', { ascending: false }).limit(20)
+      const res = await (supabase as any).rpc('get_engagement_ranking', {
+        limit_n: 20,
+        date_from: yearFrom,
+        date_to: yearTo,
+      })
       data = res.data ?? []
     } else if (view === '歌唱あり') {
       const res = await yd(supabase.from('streams').select('*'))
