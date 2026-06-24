@@ -5,6 +5,11 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { linkifyEntities } from '@/lib/linkify'
+import {
+  PUBLIC_CHAPTER_LIST_SELECT,
+  PUBLIC_ENTITY_LINK_SELECT,
+  PUBLIC_STREAM_DETAIL_SELECT,
+} from '@/lib/selects'
 import type { Stream, Chapter, Highlight, Entity } from '@/lib/types'
 import ChapterList from '@/components/ChapterList'
 
@@ -16,7 +21,11 @@ const REASON_COLORS: Record<string, string> = {
   '神回':  'bg-purple-900 text-purple-300',
 }
 
-function HighlightList({ highlights, videoId, entities }: { highlights: Highlight[]; videoId: string; entities: Entity[] }) {
+type StreamDetail = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'summary' | 'tags' | 'corner_names' | 'guests' | 'highlights'>
+type ChapterListItem = Pick<Chapter, 'id' | 'start_sec' | 'title' | 'summary'>
+type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
+
+function HighlightList({ highlights, videoId, entities }: { highlights: Highlight[]; videoId: string; entities: LinkableEntity[] }) {
   return (
     <div className="bg-gray-900 rounded-lg overflow-hidden">
       <div className="flex items-baseline gap-2 px-4 pt-4 pb-2">
@@ -54,14 +63,14 @@ function HighlightList({ highlights, videoId, entities }: { highlights: Highligh
 
 export default function StreamPage() {
   const { id } = useParams<{ id: string }>()
-  const [stream, setStream] = useState<Stream | null>(null)
-  const [chapters, setChapters] = useState<Chapter[]>([])
-  const [entities, setEntities] = useState<Entity[]>([])
+  const [stream, setStream] = useState<StreamDetail | null>(null)
+  const [chapters, setChapters] = useState<ChapterListItem[]>([])
+  const [entities, setEntities] = useState<LinkableEntity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const { data: s } = await supabase.from('streams').select('*').eq('video_id', id).single() as { data: import('@/lib/types').Stream | null }
+      const { data: s } = await supabase.from('streams').select(PUBLIC_STREAM_DETAIL_SELECT).eq('video_id', id).single() as { data: StreamDetail | null }
       if (s) {
         setStream(s)
         const { data: entityRows } = await supabase
@@ -73,18 +82,18 @@ export default function StreamPage() {
           const entityIds = (entityRows as unknown as { entity_id: string }[]).map((row) => row.entity_id)
           const { data: entityData } = await supabase
             .from('entities')
-            .select('*')
+            .select(PUBLIC_ENTITY_LINK_SELECT)
             .in('id', entityIds)
 
-          if (entityData) setEntities(entityData as Entity[])
+          if (entityData) setEntities(entityData as LinkableEntity[])
         }
 
         const { data: c } = await supabase
           .from('chapters')
-          .select('*')
+          .select(PUBLIC_CHAPTER_LIST_SELECT)
           .eq('stream_id', s.id)
           .order('sort_order')
-        if (c) setChapters(c)
+        if (c) setChapters(c as ChapterListItem[])
       }
       setLoading(false)
     }

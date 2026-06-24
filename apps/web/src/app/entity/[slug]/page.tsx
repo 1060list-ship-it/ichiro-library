@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { PUBLIC_ENTITY_DETAIL_SELECT } from '@/lib/selects'
 import type { Entity, Stream } from '@/lib/types'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -17,6 +18,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 type PageProps = {
   params: Promise<{ slug: string }>
 }
+
+type EntityDetail = Pick<Entity, 'id' | 'slug' | 'name' | 'category' | 'role' | 'description' | 'related_work' | 'external_url'>
 
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category
@@ -48,7 +51,7 @@ export default async function EntityDetailPage({ params }: PageProps) {
 
   const { data, error } = await supabase
     .from('entities')
-    .select('*')
+    .select(PUBLIC_ENTITY_DETAIL_SELECT)
     .eq('slug', slug)
     .single()
 
@@ -56,7 +59,7 @@ export default async function EntityDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const entity = data as Entity
+  const entity = data as EntityDetail
   const relatedStreams = await fetchRelatedStreams(entity.id)
 
   return (

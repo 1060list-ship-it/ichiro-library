@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { PUBLIC_STREAM_CARD_SELECT } from '@/lib/selects'
 import type { Stream } from '@/lib/types'
 import StreamCard from '@/components/StreamCard'
 import SearchBar from '@/components/SearchBar'
@@ -19,6 +20,7 @@ const CATEGORIES = [
 ]
 
 type View = 'top' | string
+type HomeStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'view_count' | 'comment_count' | 'summary' | 'tags' | 'thumbnail_url'>
 
 function HomeContent() {
   const router = useRouter()
@@ -33,7 +35,7 @@ function HomeContent() {
     return y ? parseInt(y, 10) : null
   })
   const [availableYears, setAvailableYears] = useState<number[]>([])
-  const [streams, setStreams] = useState<Stream[]>([])
+  const [streams, setStreams] = useState<HomeStream[]>([])
   const [loading, setLoading] = useState(true)
 
   // 利用可能な年一覧をDBから取得
@@ -65,7 +67,7 @@ function HomeContent() {
 
   const fetchStreams = useCallback(async () => {
     setLoading(true)
-    let data: Stream[] = []
+    let data: HomeStream[] = []
 
     const yearFrom = year !== null ? `${year}-01-01` : null
     const yearTo   = year !== null ? `${year + 1}-01-01` : null
@@ -99,17 +101,17 @@ function HomeContent() {
           : results
       } else {
         // テキストOR検索（includeキーワード）
-        let textStreams: Stream[] = []
+        let textStreams: HomeStream[] = []
         if (includes.length > 0) {
           const textConds = includes.flatMap(kw =>
             [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
           ).join(',')
-          let q = yd(supabase.from('streams').select('*').or(textConds))
+          let q = yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).or(textConds))
           for (const ex of excludes) {
             q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
           }
           const textRes = await q.order('stream_date', { ascending: false }).limit(20)
-          textStreams = (textRes.data ?? []) as Stream[]
+          textStreams = (textRes.data ?? []) as HomeStream[]
         }
 
         // エンティティ名・match_namesから関連配信を検索（includeのみ使用）
@@ -125,7 +127,7 @@ function HomeContent() {
           ;(byAlias.data ?? []).forEach((e: any) => entityIds.add(e.id))
         }))
 
-        let entityStreams: Stream[] = []
+        let entityStreams: HomeStream[] = []
         if (entityIds.size > 0) {
           const seRes = await supabase.from('stream_entities')
             .select('stream_id')
@@ -133,12 +135,12 @@ function HomeContent() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const streamIds = (seRes.data ?? []).map((r: any) => r.stream_id)
           if (streamIds.length > 0) {
-            let q = yd(supabase.from('streams').select('*').in('id', streamIds))
+            let q = yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).in('id', streamIds))
             for (const ex of excludes) {
               q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
             }
             const sRes = await q.order('stream_date', { ascending: false }).limit(20)
-            entityStreams = (sRes.data ?? []) as Stream[]
+            entityStreams = (sRes.data ?? []) as HomeStream[]
           }
         }
 
@@ -151,38 +153,41 @@ function HomeContent() {
         })
       }
     } else if (view === 'top') {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .order('stream_date', { ascending: false }).limit(year ? 20 : 10)
       data = res.data ?? []
     } else if (view === 'ranking-view') {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === 'ranking-waiwai') {
-      const res = await (supabase as any).rpc('get_engagement_ranking', {
-        limit_n: 20,
-        date_from: yearFrom,
-        date_to: yearTo,
-      })
-      data = res.data ?? []
+        const res = await supabase.rpc(
+          'get_engagement_ranking' as never,
+          {
+            limit_n: 20,
+            date_from: yearFrom,
+            date_to: yearTo,
+          } as never,
+        )
+        data = (res.data ?? []) as HomeStream[]
     } else if (view === '歌唱あり') {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .eq('has_live_singing', true)
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === 'ゲーム実況') {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .ilike('title', '%ゲーム中%')
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else if (view === '未知との遭遇') {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .contains('corner_names', ['未知との遭遇'])
         .not('title', 'ilike', '%ゲーム中%')
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []
     } else {
-      const res = await yd(supabase.from('streams').select('*'))
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .contains('corner_names', [view])
         .order('stream_date', { ascending: false }).limit(20)
       data = res.data ?? []

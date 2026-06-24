@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import type { Stream } from '@/lib/types'
 
-type Props = { stream: Stream; rank?: number }
+type StreamCardStream = Pick<Stream, 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'summary' | 'view_count' | 'comment_count' | 'tags'>
+type Props = { stream: StreamCardStream; rank?: number }
 
 export default function StreamCard({ stream, rank }: Props) {
   const date = new Date(stream.stream_date).toLocaleDateString('ja-JP', {

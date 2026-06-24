@@ -1,7 +1,9 @@
 import type { Stream } from '@/lib/types'
 
+type PlaylistStreamRowStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'view_count'>
+
 type Props = {
-  stream: Stream
+  stream: PlaylistStreamRowStream
   position: number
   isActive: boolean
   onClick: (videoId: string) => void

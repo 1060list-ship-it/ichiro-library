@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { getMagazineCoverUrl, hasLocalMagazineCover } from '@/lib/magazineCovers'
+import {
+  PUBLIC_ENTITY_LINK_SELECT,
+  PUBLIC_MAGAZINE_SELECT,
+  PUBLIC_STREAM_MAGAZINE_MAP_SELECT,
+} from '@/lib/selects'
 import { supabase } from '@/lib/supabase'
 import { linkifyEntities } from '@/lib/linkify'
 import type { Entity } from '@/lib/types'
@@ -49,6 +54,7 @@ type Magazine = {
 }
 
 type StreamInfo = { title: string; stream_date: string }
+type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
 
 // -----------------------------------------------------------------------
 // 定数
@@ -110,7 +116,7 @@ function HighlightsSection({
 }: {
   highlights: Highlight[]
   streamMap: Record<string, StreamInfo>
-  entities: Entity[]
+  entities: LinkableEntity[]
 }) {
   /**
    * 配信タイトルでグルーピング。
@@ -220,7 +226,7 @@ function SongsSection({
 }: {
   songs: Song[]
   streamMap: Record<string, StreamInfo>
-  entities: Entity[]
+  entities: LinkableEntity[]
 }) {
   const [open, setOpen] = useState(false)
 
@@ -289,7 +295,7 @@ export default function MagazineWeekPage() {
   const { week } = useParams<{ week: string }>()
   const [magazine, setMagazine] = useState<Magazine | null>(null)
   const [streamMap, setStreamMap] = useState<Record<string, StreamInfo>>({})
-  const [entities, setEntities] = useState<Entity[]>([])
+  const [entities, setEntities] = useState<LinkableEntity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -304,7 +310,7 @@ export default function MagazineWeekPage() {
         const { data, error: queryError } = await withTimeout(
           supabase
             .from('magazines')
-            .select('*')
+            .select(PUBLIC_MAGAZINE_SELECT)
             .eq('week_label', week)
             .single(),
           'マガジンの取得がタイムアウトしました'
@@ -334,12 +340,12 @@ export default function MagazineWeekPage() {
             const { data: entityData } = await withTimeout(
               supabase
                 .from('entities')
-                .select('*')
+                .select(PUBLIC_ENTITY_LINK_SELECT)
                 .in('id', entityIds),
               'エンティティ情報の取得がタイムアウトしました'
             )
 
-            if (!cancelled && entityData) setEntities(entityData as Entity[])
+            if (!cancelled && entityData) setEntities(entityData as LinkableEntity[])
           }
 
           // stream_ids から動画情報を取得して video_id ベースのマップを構築
@@ -347,7 +353,7 @@ export default function MagazineWeekPage() {
             const { data: streams } = await withTimeout(
               supabase
                 .from('streams')
-                .select('video_id, title, stream_date')
+                .select(PUBLIC_STREAM_MAGAZINE_MAP_SELECT)
                 .in('id', mag.stream_ids),
               '配信情報の取得がタイムアウトしました'
             )

@@ -5,9 +5,12 @@ import Link from 'next/link'
 import PlaylistStreamRow from '@/components/PlaylistStreamRow'
 import type { Playlist, Stream, UserRole } from '@/lib/types'
 
+type PlaylistDetail = Pick<Playlist, 'id' | 'title' | 'description'>
+type PlaylistPlayerStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'view_count'>
+
 type Props = {
-  playlist: Playlist
-  streams: Stream[]
+  playlist: PlaylistDetail
+  streams: PlaylistPlayerStream[]
   role: UserRole | null
 }
 

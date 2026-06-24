@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import PlaylistPlayer from './PlaylistPlayer'
 import { getCurrentUserRole } from '@/lib/auth'
+import { PUBLIC_PLAYLIST_LIST_SELECT, PUBLIC_STREAM_PLAYLIST_SELECT } from '@/lib/selects'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import type { Playlist, Stream } from '@/lib/types'
 
@@ -10,9 +11,12 @@ type PageProps = {
   }>
 }
 
+type PlaylistDetail = Pick<Playlist, 'id' | 'title' | 'description'>
+type PlaylistPlayerStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'view_count'>
+
 type PlaylistStreamJoinRow = {
   stream_id: string
-  streams: Stream | Stream[] | null
+  streams: PlaylistPlayerStream | PlaylistPlayerStream[] | null
 }
 
 function takeFirstRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -34,12 +38,12 @@ export default async function PlaylistDetailPage({ params }: PageProps) {
   ] = await Promise.all([
     supabase
       .from('playlists')
-      .select('*')
+      .select(PUBLIC_PLAYLIST_LIST_SELECT)
       .eq('id', id)
       .maybeSingle(),
     supabase
       .from('playlist_streams')
-      .select('stream_id, streams(*)')
+      .select(`stream_id, streams(${PUBLIC_STREAM_PLAYLIST_SELECT})`)
       .eq('playlist_id', id)
       .order('position', { ascending: true }),
     getCurrentUserRole(),
@@ -59,11 +63,11 @@ export default async function PlaylistDetailPage({ params }: PageProps) {
 
   const streams = ((streamRows ?? []) as PlaylistStreamJoinRow[])
     .map((row) => takeFirstRelation(row.streams))
-    .filter((stream): stream is Stream => stream !== null)
+    .filter((stream): stream is PlaylistPlayerStream => stream !== null)
 
   return (
     <PlaylistPlayer
-      playlist={playlist as Playlist}
+      playlist={playlist as PlaylistDetail}
       streams={streams}
       role={role}
     />

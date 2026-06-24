@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { connection } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { PUBLIC_ENTITY_INDEX_SELECT } from '@/lib/selects'
 import type { Entity } from '@/lib/types'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -17,12 +18,14 @@ function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category
 }
 
+type EntityIndexItem = Pick<Entity, 'id' | 'slug' | 'name' | 'category' | 'role' | 'description'>
+
 export default async function EntityHubPage() {
   await connection()
 
   const { data, error } = await supabase
     .from('entities')
-    .select('*')
+    .select(PUBLIC_ENTITY_INDEX_SELECT)
     .order('category', { ascending: true })
     .order('sort_order', { ascending: true })
 
@@ -30,8 +33,8 @@ export default async function EntityHubPage() {
     throw error
   }
 
-  const entities = (data ?? []) as Entity[]
-  const grouped = entities.reduce<Record<string, Entity[]>>((acc, entity) => {
+  const entities = (data ?? []) as EntityIndexItem[]
+  const grouped = entities.reduce<Record<string, EntityIndexItem[]>>((acc, entity) => {
     const key = entity.category
     acc[key] = acc[key] ?? []
     acc[key].push(entity)

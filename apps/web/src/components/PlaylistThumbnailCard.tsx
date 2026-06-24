@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Playlist } from '@/lib/types'
 
-type PlaylistCardData = Playlist & {
+type PlaylistCardData = Pick<Playlist, 'id' | 'title' | 'description'> & {
   stream_count: number
   thumbnail_url: string | null
 }

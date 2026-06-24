@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import PlaylistThumbnailCard from '@/components/PlaylistThumbnailCard'
+import { PUBLIC_PLAYLIST_LIST_SELECT } from '@/lib/selects'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import type { Playlist } from '@/lib/types'
 
@@ -12,10 +13,12 @@ type PlaylistStreamThumbnailRow = {
   streams: ThumbnailRelation | ThumbnailRelation[] | null
 }
 
-type PlaylistCardData = Playlist & {
+type PlaylistCardData = PlaylistListItem & {
   stream_count: number
   thumbnail_url: string | null
 }
+
+type PlaylistListItem = Pick<Playlist, 'id' | 'title' | 'description'>
 
 function takeFirstRelation<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) {
@@ -30,14 +33,14 @@ export default async function PlaylistsPage() {
 
   const { data: playlists, error: playlistsError } = await supabase
     .from('playlists')
-    .select('*')
+    .select(PUBLIC_PLAYLIST_LIST_SELECT)
     .order('updated_at', { ascending: false })
 
   if (playlistsError) {
     throw new Error(`playlists fetch failed: ${playlistsError.message}`)
   }
 
-  const playlistRows = (playlists ?? []) as Playlist[]
+  const playlistRows = (playlists ?? []) as PlaylistListItem[]
 
   let playlistCards: PlaylistCardData[] = []
 

@@ -1,7 +1,9 @@
 import type { Chapter } from '@/lib/types'
 
+type ChapterListItem = Pick<Chapter, 'id' | 'start_sec' | 'title' | 'summary'>
+
 type Props = {
-  chapters: Chapter[]
+  chapters: ChapterListItem[]
   videoId: string
 }
 

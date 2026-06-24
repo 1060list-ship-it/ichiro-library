@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth'
+import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Highlight, Stream } from '@/lib/types'
 
@@ -674,7 +675,7 @@ export async function fetchAdminEntities(): Promise<AdminEntity[]> {
   await requireRole(['admin'])
   const { data, error } = await supabaseAdmin
     .from('entities')
-    .select('*')
+    .select(ADMIN_ENTITY_SELECT)
     .order('category', { ascending: true })
     .order('sort_order', { ascending: true })
   if (error) throw error
@@ -685,7 +686,7 @@ export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> 
   await requireRole(['admin'])
   const { data, error } = await supabaseAdmin
     .from('entities')
-    .select('*')
+    .select(ADMIN_ENTITY_SELECT)
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
@@ -730,13 +731,13 @@ export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<
       .from('entities')
       .update(payload as never)
       .eq('id', input.id)
-      .select('*')
+      .select(ADMIN_ENTITY_SELECT)
       .single()
   } else {
     result = await supabaseAdmin
       .from('entities')
       .insert(payload as never)
-      .select('*')
+      .select(ADMIN_ENTITY_SELECT)
       .single()
   }
   if (result.error) throw result.error
