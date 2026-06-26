@@ -22,6 +22,33 @@ const CATEGORIES = [
 type View = 'top' | string
 type HomeStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'view_count' | 'comment_count' | 'summary' | 'tags' | 'thumbnail_url'>
 
+function parseJapaneseDateFromQuery(q: string): {
+  year: number | null
+  month: number | null
+  remaining: string
+  label: string | null
+} {
+  const ymMatch = q.match(/(\d{4})年(\d{1,2})月/)
+  if (ymMatch) {
+    return {
+      year: parseInt(ymMatch[1], 10),
+      month: parseInt(ymMatch[2], 10),
+      remaining: q.replace(ymMatch[0], '').trim(),
+      label: `${ymMatch[1]}年${ymMatch[2]}月`,
+    }
+  }
+  const yMatch = q.match(/(\d{4})年/)
+  if (yMatch) {
+    return {
+      year: parseInt(yMatch[1], 10),
+      month: null,
+      remaining: q.replace(yMatch[0], '').trim(),
+      label: `${yMatch[1]}年`,
+    }
+  }
+  return { year: null, month: null, remaining: q, label: null }
+}
+
 function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -69,28 +96,41 @@ function HomeContent() {
     setLoading(true)
     let data: HomeStream[] = []
 
-    const yearFrom = year !== null ? `${year}-01-01` : null
-    const yearTo   = year !== null ? `${year + 1}-01-01` : null
+    const parsed = parseJapaneseDateFromQuery(debouncedQuery.trim())
+    const textQuery = parsed.remaining
+    const effectiveYear = parsed.year ?? year
+    const effectiveMonth = parsed.month
+    let dateFrom: string | null = null
+    let dateTo: string | null = null
+    if (effectiveYear !== null && effectiveMonth !== null) {
+      dateFrom = `${effectiveYear}-${String(effectiveMonth).padStart(2, '0')}-01`
+      const nm = effectiveMonth === 12 ? 1 : effectiveMonth + 1
+      const ny = effectiveMonth === 12 ? effectiveYear + 1 : effectiveYear
+      dateTo = `${ny}-${String(nm).padStart(2, '0')}-01`
+    } else if (effectiveYear !== null) {
+      dateFrom = `${effectiveYear}-01-01`
+      dateTo = `${effectiveYear + 1}-01-01`
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const yd = (q: any) => yearFrom ? q.gte('stream_date', yearFrom).lt('stream_date', yearTo) : q
+    const yd = (q: any) => dateFrom ? q.gte('stream_date', dateFrom).lt('stream_date', dateTo) : q
 
-    if (debouncedQuery.trim()) {
-      const parts = debouncedQuery.trim().split(/\s+/).filter(Boolean)
+    if (debouncedQuery.trim() && textQuery.trim()) {
+      const parts = textQuery.trim().split(/\s+/).filter(Boolean)
       const includes = parts.filter(k => !k.startsWith('-'))
       const excludes = parts.filter(k => k.startsWith('-')).map(k => k.slice(1)).filter(Boolean)
 
       if (fuzzy) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const res = await (supabase as any).rpc('search_streams', {
-          query: includes.join(' ') || debouncedQuery,
+          query: includes.join(' ') || textQuery,
           sort_by: 'date_desc',
           page_num: 1,
           page_size: 50,
         })
         let results = (res.data ?? []) as Stream[]
-        if (yearFrom) {
+        if (dateFrom) {
           results = results.filter(s =>
-            s.stream_date >= yearFrom && s.stream_date < yearTo!
+            s.stream_date >= dateFrom! && s.stream_date < dateTo!
           )
         }
         data = excludes.length > 0
@@ -152,6 +192,11 @@ function HomeContent() {
           return true
         })
       }
+    } else if (debouncedQuery.trim()) {
+      // 日付のみのクエリ（キーワードなし）— 該当月の配信一覧
+      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
+        .order('stream_date', { ascending: false }).limit(50)
+      data = (res.data ?? []) as HomeStream[]
     } else if (view === 'top') {
       const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .order('stream_date', { ascending: false }).limit(year ? 20 : 10)
@@ -165,8 +210,8 @@ function HomeContent() {
           'get_engagement_ranking' as never,
           {
             limit_n: 20,
-            date_from: yearFrom,
-            date_to: yearTo,
+            date_from: dateFrom,
+            date_to: dateTo,
           } as never,
         )
         data = (res.data ?? []) as HomeStream[]
@@ -205,6 +250,8 @@ function HomeContent() {
   const [showHelp, setShowHelp] = useState(false)
 
   const isSearching = debouncedQuery.trim().length > 0
+  const parsedDisplay = parseJapaneseDateFromQuery(debouncedQuery.trim())
+  const textQueryDisplay = parsedDisplay.remaining.trim()
   const currentCategory = CATEGORIES.find(c => c.key === view)
   const currentLabel = currentCategory?.label
   const currentDescription = currentCategory?.description
@@ -228,6 +275,16 @@ function HomeContent() {
 
       {/* カテゴリナビゲーション */}
       <nav className="border-b border-gray-800 px-4 py-2 flex flex-wrap gap-2 justify-center">
+        <button
+          onClick={() => { setView('top'); setQuery('') }}
+          className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full transition-colors ${
+            view === 'top' && !isSearching
+              ? 'bg-white text-gray-950 font-semibold'
+              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+          }`}
+        >
+          最新
+        </button>
         {CATEGORIES.map(cat => (
           <button
             key={cat.key}
@@ -310,6 +367,14 @@ function HomeContent() {
                 <p className="text-gray-500">例：「さかな」で「サカナクション」もヒット</p>
               </div>
               <div className="space-y-1.5">
+                <p className="text-gray-300 font-semibold">日付・期間検索</p>
+                <p>「2026年2月」のように入力すると、その月の配信に絞り込まれます。キーワードと組み合わせも可能です。</p>
+                <div className="font-mono text-gray-500 space-y-0.5">
+                  <p><span className="text-gray-300">2026年2月</span> → 2月の配信一覧</p>
+                  <p><span className="text-gray-300">2026年2月 浜田</span> → 2月 × 浜田</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
                 <p className="text-gray-300 font-semibold">人物・エンティティ検索</p>
                 <p>登録済みの人物名や別名（表記ゆれ）でも検索できます。テキストに名前が出ていない配信でも、エンティティとして紐付けられていれば表示されます。</p>
                 <p className="mt-1">
@@ -335,7 +400,9 @@ function HomeContent() {
           <div>
             <h2 className="text-sm font-semibold text-gray-300">
               {isSearching
-                ? `「${debouncedQuery}」の検索結果${year ? ` (${year}年)` : ''}`
+                ? textQueryDisplay
+                  ? `「${textQueryDisplay}」の検索結果${parsedDisplay.label ? ` (${parsedDisplay.label})` : year ? ` (${year}年)` : ''}`
+                  : `${parsedDisplay.label}の配信`
                 : view === 'top'
                   ? year ? `${year}年の配信` : '最近の配信'
                   : `${currentLabel}${year ? ` (${year}年)` : ''}`}
