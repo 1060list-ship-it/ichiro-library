@@ -6,7 +6,6 @@ import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Highlight, Stream } from '@/lib/types'
 
-export { logoutAction } from '@/lib/auth-actions'
 
 export type AdminDashboardData = {
   summary: {

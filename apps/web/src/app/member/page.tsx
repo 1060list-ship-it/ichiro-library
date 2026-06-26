@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireRoleOrRedirect } from '@/lib/auth'
-import { logoutAction } from './actions'
+import { logoutAction } from '@/lib/auth-actions'
 import MemberPageClient from './MemberPageClient'
 
 export default async function MemberPage() {

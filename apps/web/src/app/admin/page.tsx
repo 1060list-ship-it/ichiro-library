@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
-import { logoutAction } from './actions'
+import { logoutAction } from '@/lib/auth-actions'
 import AdminPageClient from './AdminPageClient'
 
 export default async function AdminPage() {
