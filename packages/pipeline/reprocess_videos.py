@@ -162,9 +162,35 @@ def run(
     no_summary_only: bool = False,
     recent_first: bool = False,
     refetch: bool = False,
+    whisper_only: bool = False,
+    skip_dates = None,
 ):
     supabase = get_supabase_client()
     gemini = get_gemini_client()
+
+    skip_dates = set(skip_dates or [])
+
+    whisper_stream_ids = None
+    if whisper_only and not target_video_id:
+        whisper_rows = (
+            supabase.table("transcript_snapshots")
+            .select("stream_id")
+            .eq("source", "whisper")
+            .execute()
+            .data
+            or []
+        )
+        whisper_stream_ids = sorted({
+            row.get("stream_id")
+            for row in whisper_rows
+            if row.get("stream_id")
+        })
+        if not whisper_stream_ids:
+            logger.info("source='whisper' の transcript_snapshot がないため終了")
+            return
+        logger.info(f"モード: whisper 由来 snapshot の stream のみ ({len(whisper_stream_ids)}件)")
+    elif whisper_only and target_video_id:
+        logger.info("--video 指定のため --whisper-only は無視する")
 
     query = supabase.table("streams").select("id,video_id,transcript,is_reviewed,status,stream_date")
     if target_video_id:
@@ -172,6 +198,8 @@ def run(
     elif no_summary_only:
         query = query.is_("summary", "null")
         logger.info("モード: 要約なし動画のみ")
+    if whisper_stream_ids is not None:
+        query = query.in_("id", whisper_stream_ids)
 
     rows = query.order("stream_date", desc=recent_first).execute().data or []
 
@@ -182,6 +210,10 @@ def run(
 
     for i, row in enumerate(rows):
         vid = row['video_id']
+        stream_date = row.get("stream_date")
+        if stream_date in skip_dates:
+            logger.info(f"--- {i + 1}/{total}件目: {vid} {stream_date} スキップ ---")
+            continue
         if vid in SKIP_IDS:
             logger.info(f"--- {i + 1}/{total}件目: {vid} スキップ ---")
             continue
@@ -210,6 +242,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-summary-only", action="store_true", help="要約なし動画のみ再処理（Gemini上限回復後のバックフィル用）")
     parser.add_argument("--recent-first", action="store_true", help="最新配信から再処理（7月リプロセス用）")
     parser.add_argument("--refetch", action="store_true", help="snapshot があっても字幕を再取得する")
+    parser.add_argument("--whisper-only", action="store_true", help="transcript_snapshots.source='whisper' の stream のみ再処理する")
+    parser.add_argument("--skip-date", action="append", default=[], help="指定した stream_date (YYYY-MM-DD) をスキップする。複数回指定可")
     args = parser.parse_args()
     run(
         dry_run=args.dry_run,
@@ -217,4 +251,6 @@ if __name__ == "__main__":
         no_summary_only=args.no_summary_only,
         recent_first=args.recent_first,
         refetch=args.refetch,
+        whisper_only=args.whisper_only,
+        skip_dates=args.skip_date,
     )
