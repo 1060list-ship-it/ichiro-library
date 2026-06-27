@@ -33,8 +33,13 @@ export default function AboutPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">始まり</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
-              配信を見返したい時に「あの話どの回だったっけ」と迷うことが多かったので、自分のために作りました。字幕を
-              AI で解析して要約・タグ付けすることで、内容で検索できるようになっています。
+              配信を見返したいとき、「あの話どの回だったっけ」と迷うことが多かったので、はじめは自分のために作りました。
+            </p>
+            <p className="text-sm leading-7 text-gray-300 sm:text-base">
+              一郎さんの配信は本数が多く、1回あたりの時間も長い。夜遅くに始まることも多いため、好きでもすべてリアルタイムで追いかけるのは難しい。仕事や育児で多忙な友人や家族にも、「見たいけど見られない」という状況が続いている人が何人かいました。
+            </p>
+            <p className="text-sm leading-7 text-gray-300 sm:text-base">
+              このサービスは、追いかけ疲れたファンが「ついていくための」ツールです。要約やタグを手がかりに「今週はこれだけは見ておこう」と一本を選んでもらえたら、それで十分だと思っています。完全に離れてしまうより、一本でもつながり続ける—そのための場所として作りました。字幕をAIで解析して要約・タグ付けすることで、内容で検索できるようになっています。
             </p>
           </section>
 
@@ -76,10 +81,31 @@ export default function AboutPage() {
             </p>
           </section>
 
+          <section className="space-y-3">
+            <h2 className="text-xl font-semibold text-white">広告・サポートについて</h2>
+            <p className="text-sm leading-7 text-gray-300 sm:text-base">
+              当サービスは広告・スポンサーを入れない方針で運営しています。配信の内容に集中して、快適に使っていただくためです。
+            </p>
+            <p className="text-sm leading-7 text-gray-300 sm:text-base">
+              API費用・開発コスト・要約の精度確認にかかる時間など、多少の維持コストはかかっています。もし応援していただける方がいれば、投げ銭という形でサポートいただけると嬉しいです。義務では一切ありません。{' '}
+              <a
+                href="https://ofuse.me/e9a3423e"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-indigo-300 underline decoration-indigo-500/50 underline-offset-4 transition hover:text-white hover:decoration-white/60"
+              >
+                Ofuse でサポートする →
+              </a>
+            </p>
+          </section>
+
           <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
             <h2 className="text-xl font-semibold text-white">注意事項</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               当サービスはファンが個人で運営しています。サカナクション、NF、所属事務所とは一切関係がありません。
+            </p>
+            <p className="text-sm leading-7 text-gray-300 sm:text-base">
+              要約・タグ・チャプターはAIが自動生成しており、内容の正確性は保証できません。あくまで視聴の手がかりとしてご利用ください。
             </p>
           </section>
 
