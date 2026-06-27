@@ -1,6 +1,6 @@
 'use client'
 
-const SAMPLE_QUERIES = ['2024年3月', '浜田', '浜田 -ゲーム']
+const SAMPLE_QUERIES = ['2024年3月', 'ハマダ', 'ハマダ -ゲーム']
 
 type Props = {
   value: string

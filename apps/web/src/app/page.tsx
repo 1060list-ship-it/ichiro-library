@@ -308,13 +308,9 @@ function HomeContent() {
       <div className="border-b border-gray-800">
         <div className="mx-auto max-w-5xl px-4 py-8">
           <div className="max-w-3xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.32em] text-gray-500">Archive Search</p>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">ichiro library</h1>
-              <p className="max-w-2xl text-sm leading-7 text-gray-300 sm:text-base">
-                山口一郎のYouTubeライブ配信を、人物名・日付・話題からあとで探せるアーカイブ。
-              </p>
-            </div>
+            <p className="max-w-2xl text-sm leading-7 text-gray-300 sm:text-base">
+              山口一郎のYouTubeライブ配信を、人物名・日付・話題からあとで探せるアーカイブ。
+            </p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
               <span>{isSearching ? '検索結果' : '配信'} {resultCount.toLocaleString()}件</span>
               {latestUpdatedAt && <span>最終更新 {formatUpdatedAt(latestUpdatedAt)}</span>}
