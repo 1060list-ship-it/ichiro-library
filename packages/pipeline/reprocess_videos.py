@@ -5,6 +5,7 @@
   python reprocess_videos.py                    # 全動画を再処理
   python reprocess_videos.py --no-summary-only  # 要約なし動画のみ（Gemini上限回復後のバックフィル用）
   python reprocess_videos.py --recent-first     # 最新配信から再処理
+  python reprocess_videos.py --refetch          # snapshot があっても字幕を再取得
   python reprocess_videos.py --dry-run          # 確認のみ
   python reprocess_videos.py --video VIDEO_ID   # 特定動画のみ
 """
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 
-from get_transcript import get_transcript, build_timestamped_text
+from get_transcript import TranscriptResult, get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
 from store import get_supabase_client, insert_chapters, save_transcript_snapshot
 
@@ -30,7 +31,50 @@ logging.basicConfig(
 logger = logging.getLogger("reprocess")
 
 
-def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = False):
+def _join_snippet_text(snippets: list[dict]) -> str:
+    return " ".join(
+        (snippet.get("text") or "").strip()
+        for snippet in snippets
+        if (snippet.get("text") or "").strip()
+    )
+
+
+def _get_latest_transcript_snapshot(supabase, stream_id: str):
+    rows = (
+        supabase.table("transcript_snapshots")
+        .select("id,source,snippets,captured_at")
+        .eq("stream_id", stream_id)
+        .order("captured_at", desc=True)
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        return None
+
+    snapshot = rows[0]
+    snippets = snapshot.get("snippets") or []
+    if not isinstance(snippets, list) or not snippets:
+        logger.warning(f"[{stream_id}] transcript_snapshot はあるが snippets が不正。再取得へフォールバック")
+        return None
+
+    return snapshot["id"], TranscriptResult(
+        text=_join_snippet_text(snippets),
+        snippets=snippets,
+        source=snapshot.get("source") or "snapshot",
+    )
+
+
+def reprocess_one(
+    supabase,
+    gemini,
+    row: dict,
+    dry_run: bool,
+    force: bool = False,
+    refetch: bool = False,
+):
     video_id = row["video_id"]
     stream_id = row["id"]
     transcript_text = row.get("transcript") or ""
@@ -39,8 +83,22 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = Fals
         logger.info(f"[{video_id}] レビュー済みのため再処理をスキップ")
         return
 
-    transcript_result = get_transcript(video_id)
     snapshot_id = None
+    transcript_result = None
+
+    if not refetch:
+        try:
+            latest_snapshot = _get_latest_transcript_snapshot(supabase, stream_id)
+        except Exception as e:
+            logger.warning(f"[{video_id}] snapshot 取得失敗。再取得へフォールバック: {e}")
+            latest_snapshot = None
+
+        if latest_snapshot:
+            snapshot_id, transcript_result = latest_snapshot
+            logger.info(f"[{video_id}] transcript_snapshot を再利用: {snapshot_id}")
+
+    if transcript_result is None:
+        transcript_result = get_transcript(video_id)
 
     if transcript_result.source == "failed" or not transcript_result.snippets:
         if not transcript_text:
@@ -67,7 +125,7 @@ def reprocess_one(supabase, gemini, row: dict, dry_run: bool, force: bool = Fals
         logger.info(f"[{video_id}] summary={ai_result.get('summary', '')[:60]}...")
         return
 
-    if transcript_result.source != "failed" and transcript_result.snippets:
+    if snapshot_id is None and transcript_result.source != "failed" and transcript_result.snippets:
         try:
             snapshot_id = save_transcript_snapshot(
                 supabase,
@@ -103,6 +161,7 @@ def run(
     target_video_id: str = None,
     no_summary_only: bool = False,
     recent_first: bool = False,
+    refetch: bool = False,
 ):
     supabase = get_supabase_client()
     gemini = get_gemini_client()
@@ -128,7 +187,14 @@ def run(
             continue
         logger.info(f"--- {i + 1}/{total}件目: {vid} ---")
         try:
-            reprocess_one(supabase, gemini, row, dry_run, force=bool(target_video_id))
+            reprocess_one(
+                supabase,
+                gemini,
+                row,
+                dry_run,
+                force=bool(target_video_id),
+                refetch=refetch,
+            )
         except Exception as e:
             logger.error(f"[{vid}] エラー: {e}", exc_info=True)
         if i < total - 1:
@@ -143,10 +209,12 @@ if __name__ == "__main__":
     parser.add_argument("--video", type=str, help="特定の動画IDのみ再処理")
     parser.add_argument("--no-summary-only", action="store_true", help="要約なし動画のみ再処理（Gemini上限回復後のバックフィル用）")
     parser.add_argument("--recent-first", action="store_true", help="最新配信から再処理（7月リプロセス用）")
+    parser.add_argument("--refetch", action="store_true", help="snapshot があっても字幕を再取得する")
     args = parser.parse_args()
     run(
         dry_run=args.dry_run,
         target_video_id=args.video,
         no_summary_only=args.no_summary_only,
         recent_first=args.recent_first,
+        refetch=args.refetch,
     )
