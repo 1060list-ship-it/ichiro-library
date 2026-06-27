@@ -46,8 +46,8 @@ export default function AboutPage() {
                 タイトル・要約・ゲスト名など全文で検索
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <strong className="text-white">タグで絞り込み</strong> —
-                「音楽制作」「ゲスト」「メンタルヘルス」など28種類のカテゴリ
+                <strong className="text-white">カテゴリから探す</strong> —
+                最新・再生数・ワイワイ・ライブビデオ解説などの切り口で配信を一覧できます
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <strong className="text-white">年別フィルター</strong> —

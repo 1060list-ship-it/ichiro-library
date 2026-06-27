@@ -106,6 +106,7 @@ export default function StreamPage() {
   const date = new Date(stream.stream_date).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
+  const youtubeUrl = `https://www.youtube.com/watch?v=${stream.video_id}`
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -127,6 +128,16 @@ export default function StreamPage() {
         <div className="space-y-2">
           <p className="text-sm text-gray-400">{date}</p>
           <h1 className="text-lg font-bold leading-snug">{stream.title}</h1>
+          <div>
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-950 transition hover:bg-gray-200"
+            >
+              YouTubeで全部見る ↗
+            </a>
+          </div>
           <div className="flex gap-4 text-sm text-gray-400">
             {stream.view_count && <span>再生 {stream.view_count.toLocaleString()}</span>}
             {stream.duration_min && <span>{stream.duration_min}分</span>}
@@ -153,6 +164,13 @@ export default function StreamPage() {
           <div className="bg-gray-900 rounded-lg p-4 space-y-1">
             <p className="text-xs text-gray-500 font-medium">AI要約</p>
             <p className="text-sm text-gray-200 leading-relaxed">{linkifyEntities(stream.summary, entities)}</p>
+            <button
+              type="button"
+              onClick={() => console.log('stream-summary-report', { videoId: stream.video_id, title: stream.title })}
+              className="pt-2 text-xs text-rose-300 transition hover:text-rose-200"
+            >
+              この要約の内容が違う
+            </button>
           </div>
         )}
 
@@ -163,6 +181,17 @@ export default function StreamPage() {
         {stream.highlights && stream.highlights.length > 0 && (
           <HighlightList highlights={stream.highlights} videoId={stream.video_id} entities={entities} />
         )}
+
+        <div className="border-t border-gray-800 pt-2">
+          <a
+            href={youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-full border border-gray-700 px-4 py-2 text-sm font-semibold text-white transition hover:border-gray-500 hover:bg-gray-900"
+          >
+            YouTubeで全部見る ↗
+          </a>
+        </div>
       </div>
     </main>
   )

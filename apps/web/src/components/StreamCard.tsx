@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Stream } from '@/lib/types'
 
-type StreamCardStream = Pick<Stream, 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'summary' | 'view_count' | 'comment_count' | 'tags'>
+type StreamCardStream = Pick<Stream, 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'thumbnail_url' | 'summary' | 'view_count' | 'comment_count' | 'tags'>
 type Props = { stream: StreamCardStream; rank?: number }
 
 export default function StreamCard({ stream, rank }: Props) {
@@ -24,6 +24,11 @@ export default function StreamCard({ stream, rank }: Props) {
                 <span className={`text-sm font-bold ${rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>
                   {rank}
                 </span>
+              </div>
+            )}
+            {stream.duration_min != null && (
+              <div className="absolute right-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[11px] font-medium text-white">
+                {stream.duration_min}分
               </div>
             )}
           </div>

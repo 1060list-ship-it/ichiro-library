@@ -3,6 +3,7 @@ export const PUBLIC_STREAM_CARD_SELECT = [
   'video_id',
   'title',
   'stream_date',
+  'duration_min',
   'view_count',
   'comment_count',
   'summary',
