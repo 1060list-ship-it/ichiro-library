@@ -186,14 +186,19 @@ export default function StreamPage() {
           <div className="bg-gray-900 rounded-lg p-4 space-y-1">
             <p className="text-xs text-gray-500 font-medium">AI要約</p>
             <p className="text-sm text-gray-200 leading-relaxed">{linkifyEntities(stream.summary, entities)}</p>
-            <button
-              type="button"
-              onClick={() => void handleReport()}
-              disabled={reported || reporting}
-              className="pt-2 text-xs text-rose-300 transition hover:text-rose-200 disabled:text-gray-600 disabled:cursor-default"
-            >
-              {reported ? '報告済み' : reporting ? '送信中...' : 'この要約の内容が違う'}
-            </button>
+            <div className="pt-2 space-y-1">
+              {!reported && !reporting && (
+                <p className="text-xs text-gray-500">要約が気になる場合はお知らせください。</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleReport()}
+                disabled={reported || reporting}
+                className="text-xs text-rose-300 transition hover:text-rose-200 disabled:text-gray-600 disabled:cursor-default"
+              >
+                {reported ? '報告済み' : reporting ? '送信中...' : '報告する'}
+              </button>
+            </div>
           </div>
         )}
 
