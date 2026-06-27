@@ -106,7 +106,14 @@ function StreamRow({
       </div>
 
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-white">{stream.title}</p>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-white">{stream.title}</p>
+          {stream.needs_manual_review && (
+            <span className="flex-shrink-0 rounded-full bg-rose-900/60 border border-rose-700 px-2 py-0.5 text-xs text-rose-300">
+              要目視
+            </span>
+          )}
+        </div>
         <div className="mt-2 flex gap-4 text-xs text-gray-400">
           <span>{formatDate(stream.stream_date)}</span>
           <span>{formatStatus(stream.status)}</span>

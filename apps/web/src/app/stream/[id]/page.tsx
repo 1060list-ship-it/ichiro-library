@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { reportStreamSummary } from '../actions'
 import { linkifyEntities } from '@/lib/linkify'
 import {
   PUBLIC_CHAPTER_LIST_SELECT,
@@ -61,12 +62,16 @@ function HighlightList({ highlights, videoId, entities }: { highlights: Highligh
   )
 }
 
+const REPORT_STORAGE_PREFIX = 'ichiro_reported_'
+
 export default function StreamPage() {
   const { id } = useParams<{ id: string }>()
   const [stream, setStream] = useState<StreamDetail | null>(null)
   const [chapters, setChapters] = useState<ChapterListItem[]>([])
   const [entities, setEntities] = useState<LinkableEntity[]>([])
   const [loading, setLoading] = useState(true)
+  const [reported, setReported] = useState(false)
+  const [reporting, setReporting] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -98,7 +103,18 @@ export default function StreamPage() {
       setLoading(false)
     }
     load()
+
+    setReported(!!localStorage.getItem(REPORT_STORAGE_PREFIX + id))
   }, [id])
+
+  async function handleReport() {
+    if (reported || reporting) return
+    setReporting(true)
+    await reportStreamSummary(id, navigator.userAgent)
+    localStorage.setItem(REPORT_STORAGE_PREFIX + id, '1')
+    setReported(true)
+    setReporting(false)
+  }
 
   if (loading) return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">読み込み中...</div>
   if (!stream) return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">配信が見つかりません</div>
@@ -166,10 +182,11 @@ export default function StreamPage() {
             <p className="text-sm text-gray-200 leading-relaxed">{linkifyEntities(stream.summary, entities)}</p>
             <button
               type="button"
-              onClick={() => console.log('stream-summary-report', { videoId: stream.video_id, title: stream.title })}
-              className="pt-2 text-xs text-rose-300 transition hover:text-rose-200"
+              onClick={() => void handleReport()}
+              disabled={reported || reporting}
+              className="pt-2 text-xs text-rose-300 transition hover:text-rose-200 disabled:text-gray-600 disabled:cursor-default"
             >
-              この要約の内容が違う
+              {reported ? '報告済み' : reporting ? '送信中...' : 'この要約の内容が違う'}
             </button>
           </div>
         )}
