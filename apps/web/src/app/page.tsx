@@ -10,14 +10,8 @@ import StreamCard from '@/components/StreamCard'
 import SearchBar from '@/components/SearchBar'
 
 const CATEGORIES = [
-  { key: 'top',            label: '最新',           description: '新しく追加された配信を日付順に表示' },
-  { key: 'ranking-view',   label: '再生数',        description: '再生数が多い配信ランキング' },
-  { key: 'ranking-waiwai', label: 'ワイワイ',       description: 'コメント数＝盛り上がり度が高かった配信ランキング' },
-  { key: 'ライブビデオ解説', label: 'ライブビデオ解説', description: 'MVやライブ映像を一郎がリアルタイムで解説するコーナー' },
-  { key: '深夜対談',        label: '深夜対談',       description: '深夜に仲間と本音で語り合うトークコーナー' },
-  { key: '未知との遭遇',    label: '未知との遭遇',   description: '一郎が知らないアーティストや楽曲に初めて触れるコーナー' },
-  { key: 'ゲーム実況',      label: 'ゲーム実況',     description: '一郎がゲームをプレイ・実況する配信' },
-  { key: '歌唱あり',        label: '歌唱あり',       description: 'ライブ中に歌唱シーンがある配信' },
+  { key: 'top',          label: '最新' },
+  { key: 'ranking-view', label: '再生数' },
 ]
 
 type View = 'top' | string
@@ -238,50 +232,6 @@ function HomeContent() {
       const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
-    } else if (view === 'ranking-waiwai') {
-      const allRes = await supabase.rpc(
-        'get_engagement_ranking' as never,
-        {
-          limit_n: 500,
-          date_from: dateFrom,
-          date_to: dateTo,
-        } as never,
-      )
-      const rankingResults = (allRes.data ?? []) as HomeStream[]
-      count = rankingResults.length
-      data = rankingResults.slice(0, 20)
-    } else if (view === '歌唱あり') {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true })).eq('has_live_singing', true)
-      count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
-        .eq('has_live_singing', true)
-        .order('stream_date', { ascending: false }).limit(20)
-      data = res.data ?? []
-    } else if (view === 'ゲーム実況') {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true })).ilike('title', '%ゲーム中%')
-      count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
-        .ilike('title', '%ゲーム中%')
-        .order('stream_date', { ascending: false }).limit(20)
-      data = res.data ?? []
-    } else if (view === '未知との遭遇') {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true }))
-        .contains('corner_names', ['未知との遭遇'])
-        .not('title', 'ilike', '%ゲーム中%')
-      count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
-        .contains('corner_names', ['未知との遭遇'])
-        .not('title', 'ilike', '%ゲーム中%')
-        .order('stream_date', { ascending: false }).limit(20)
-      data = res.data ?? []
-    } else {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true }))
-        .contains('corner_names', [view])
-      count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
-        .contains('corner_names', [view])
-        .order('stream_date', { ascending: false }).limit(20)
-      data = res.data ?? []
     }
 
     setStreams(data)
@@ -301,7 +251,7 @@ function HomeContent() {
   const textQueryDisplay = parsedDisplay.remaining.trim()
   const currentCategory = CATEGORIES.find(c => c.key === view)
   const currentLabel = currentCategory?.label
-  const showRank = view === 'ranking-view' || view === 'ranking-waiwai'
+  const showRank = view === 'ranking-view'
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -320,25 +270,20 @@ function HomeContent() {
       </div>
 
       <div className="mx-auto max-w-5xl px-4 py-6">
-        <nav className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <nav className="flex gap-2">
           {CATEGORIES.map(cat => (
-          <button
-            key={cat.key}
-            onClick={() => { setView(cat.key); setQuery('') }}
-            className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
-              view === cat.key && !isSearching
-                ? 'border-white bg-white text-gray-950'
-                : 'border-gray-800 bg-gray-900 text-gray-200 hover:border-gray-700 hover:bg-gray-800'
-            }`}
-          >
-            <span className="block text-sm font-semibold">{cat.label}</span>
-            <span className={`mt-1 block text-[11px] leading-relaxed ${
-              view === cat.key && !isSearching ? 'text-gray-700' : 'text-gray-500'
-            }`}>
-              {cat.description}
-            </span>
-          </button>
-        ))}
+            <button
+              key={cat.key}
+              onClick={() => { setView(cat.key); setQuery('') }}
+              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
+                view === cat.key && !isSearching
+                  ? 'bg-blue-950 border border-blue-500 text-blue-300 shadow-[0_0_8px_rgba(59,130,246,0.3)]'
+                  : 'bg-transparent border border-gray-700 text-gray-400 hover:border-blue-500 hover:text-blue-300'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
         </nav>
       </div>
 
