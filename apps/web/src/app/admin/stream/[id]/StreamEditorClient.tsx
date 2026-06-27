@@ -25,8 +25,7 @@ type Props = {
 
 type FormState = {
   summary: string
-  tags: string
-  cornerNames: string[]
+  selectedTags: string[]
   guests: string
   songs: string
   hasLiveSinging: boolean
@@ -45,7 +44,8 @@ type EditableChapter = {
   summary: string
 }
 
-const KNOWN_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
+const LEGACY_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
+const PRESET_TAGS = [...LEGACY_CORNER_NAMES, '雑談', '告知', '制作裏話', '新曲', 'ファン参加']
 const HIGHLIGHT_REASONS: Highlight['reason'][] = ['笑い', '名言', '感動', '驚き', '神回']
 const SCRUTINY_CATEGORY_LABELS: Record<string, string> = {
   song: '曲名',
@@ -79,10 +79,17 @@ function formatScrutinyCategory(category: string) {
 }
 
 function toFormState(stream: AdminEditableStream): FormState {
+  const seen = new Set<string>()
+  const selectedTags: string[] = []
+  for (const t of [...(stream.tags ?? []), ...(stream.corner_names ?? [])]) {
+    if (!seen.has(t)) {
+      seen.add(t)
+      selectedTags.push(t)
+    }
+  }
   return {
     summary: stream.summary ?? '',
-    tags: toCsv(stream.tags),
-    cornerNames: stream.corner_names ?? [],
+    selectedTags,
     guests: toCsv(stream.guests),
     songs: toCsv(stream.songs),
     hasLiveSinging: Boolean(stream.has_live_singing),
@@ -160,7 +167,7 @@ export default function StreamEditorClient({ videoId }: Props) {
   const [stream, setStream] = useState<AdminEditableStream | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [chapters, setChapters] = useState<EditableChapter[]>([])
-  const [customCornerName, setCustomCornerName] = useState('')
+  const [freeTagInput, setFreeTagInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [pageError, setPageError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
@@ -241,37 +248,28 @@ export default function StreamEditorClient({ videoId }: Props) {
     }
   }, [videoId])
 
-  function toggleCornerName(cornerName: string) {
+  function toggleTag(tag: string) {
     if (!form) return
-
-    const exists = form.cornerNames.includes(cornerName)
-    const nextCornerNames = exists
-      ? form.cornerNames.filter((value) => value !== cornerName)
-      : [...form.cornerNames, cornerName]
-
+    const exists = form.selectedTags.includes(tag)
+    const nextTags = exists
+      ? form.selectedTags.filter((t) => t !== tag)
+      : [...form.selectedTags, tag]
     setForm({
       ...form,
-      cornerNames: nextCornerNames,
-      hasLiveViewing: nextCornerNames.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
+      selectedTags: nextTags,
+      hasLiveViewing: nextTags.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
     })
   }
 
-  function addCustomCornerName() {
+  function addFreeTag() {
     if (!form) return
-
-    const value = customCornerName.trim()
-    if (!value) return
-
-    if (!form.cornerNames.includes(value)) {
-      const nextCornerNames = [...form.cornerNames, value]
-      setForm({
-        ...form,
-        cornerNames: nextCornerNames,
-        hasLiveViewing: nextCornerNames.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
-      })
+    const value = freeTagInput.trim()
+    if (!value || form.selectedTags.includes(value)) {
+      setFreeTagInput('')
+      return
     }
-
-    setCustomCornerName('')
+    setForm({ ...form, selectedTags: [...form.selectedTags, value] })
+    setFreeTagInput('')
   }
 
   function updateHighlight(index: number, nextValue: Highlight) {
@@ -334,8 +332,8 @@ export default function StreamEditorClient({ videoId }: Props) {
     const payload: UpdateAdminStreamInput = {
       videoId,
       summary: form.summary,
-      tags: form.tags,
-      cornerNames: form.cornerNames.join(', '),
+      tags: form.selectedTags.join(', '),
+      cornerNames: form.selectedTags.filter((tag) => LEGACY_CORNER_NAMES.includes(tag)).join(', '),
       guests: form.guests,
       songs: form.songs,
       hasLiveSinging: form.hasLiveSinging,
@@ -442,6 +440,12 @@ export default function StreamEditorClient({ videoId }: Props) {
             ← 一覧に戻る
           </Link>
           <div className="flex items-center gap-4">
+            <Link
+              href="/admin/entity"
+              className="text-sm text-gray-300 underline decoration-gray-700 underline-offset-4 hover:text-white"
+            >
+              エンティティ管理
+            </Link>
             {stream && (
               <Link
                 href={`/stream/${stream.video_id}`}
@@ -591,80 +595,68 @@ export default function StreamEditorClient({ videoId }: Props) {
                 </div>
               )}
 
-              <TextField
-                label="タグ"
-                value={form.tags}
-                onChange={(value) => setForm({ ...form, tags: value })}
-                description="検索や分類に使うキーワードをカンマ区切りで入力します。"
-                placeholder="例: 雑談, 音楽, 深夜"
-              />
-
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <p className="text-sm text-gray-300">コーナー名</p>
-                  <p className="text-xs text-gray-500">よく使うコーナーはチェックで選び、無いものだけ追加します。</p>
+                  <p className="text-sm text-gray-300">タグ</p>
+                  <p className="text-xs text-gray-500">よく使うタグを選ぶか、下の入力欄で追加します。</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {KNOWN_CORNER_NAMES.map((cornerName) => {
-                    const checked = form.cornerNames.includes(cornerName)
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_TAGS.map((tag) => {
+                    const selected = form.selectedTags.includes(tag)
                     return (
-                      <label
-                        key={cornerName}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-3 text-sm transition ${
-                          checked
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleTag(tag)}
+                        className={`rounded-full border px-3 py-1 text-xs transition ${
+                          selected
                             ? 'border-white bg-white text-gray-950'
-                            : 'border-gray-800 bg-gray-950 text-gray-300 hover:border-gray-600'
+                            : 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500 hover:text-white'
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleCornerName(cornerName)}
-                          className="h-4 w-4 rounded border-gray-500"
-                        />
-                        <span>{cornerName}</span>
-                      </label>
+                        {tag}
+                      </button>
                     )
                   })}
                 </div>
 
+                {form.selectedTags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {form.selectedTags.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleTag(tag)}
+                        className="rounded-full border border-indigo-700 bg-indigo-900/40 px-3 py-1 text-xs text-indigo-300 transition hover:border-indigo-500"
+                      >
+                        {tag} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <input
-                    value={customCornerName}
-                    onChange={(event) => setCustomCornerName(event.target.value)}
+                    value={freeTagInput}
+                    onChange={(event) => setFreeTagInput(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault()
-                        addCustomCornerName()
+                        addFreeTag()
                       }
                     }}
-                    placeholder="コーナー名を追加"
+                    placeholder="候補にないタグを追加"
                     className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
                   />
                   <button
                     type="button"
-                    onClick={addCustomCornerName}
+                    onClick={addFreeTag}
                     className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
                   >
                     追加
                   </button>
                 </div>
-
-                {form.cornerNames.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {form.cornerNames.map((cornerName) => (
-                      <button
-                        key={cornerName}
-                        type="button"
-                        onClick={() => toggleCornerName(cornerName)}
-                        className="rounded-full border border-gray-700 bg-gray-950 px-3 py-1 text-xs text-gray-200 transition hover:border-gray-500 hover:text-white"
-                      >
-                        {cornerName} ×
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <TextField

@@ -76,6 +76,7 @@ export default function StreamPage() {
   useEffect(() => {
     async function load() {
       const { data: s } = await supabase.from('streams').select(PUBLIC_STREAM_DETAIL_SELECT).eq('video_id', id).single() as { data: StreamDetail | null }
+      setReported(Boolean(localStorage.getItem(REPORT_STORAGE_PREFIX + id)))
       if (s) {
         setStream(s)
         const { data: entityRows } = await supabase
@@ -103,8 +104,6 @@ export default function StreamPage() {
       setLoading(false)
     }
     load()
-
-    setReported(!!localStorage.getItem(REPORT_STORAGE_PREFIX + id))
   }, [id])
 
   async function handleReport() {
@@ -161,19 +160,26 @@ export default function StreamPage() {
         </div>
 
         {/* タグ */}
-        {(stream.tags?.length || stream.corner_names?.length || stream.guests?.length) ? (
-          <div className="flex flex-wrap gap-2">
-            {stream.corner_names?.map(c => (
-              <span key={c} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{c}</span>
-            ))}
-            {stream.guests?.map(g => (
-              <span key={g} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyEntities(g, entities)}</span>
-            ))}
-            {stream.tags?.map(t => (
-              <span key={t} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{t}</span>
-            ))}
-          </div>
-        ) : null}
+        {(() => {
+          const cornerSet = new Set(stream.corner_names ?? [])
+          const tagsOnly = (stream.tags ?? []).filter((tag) => !cornerSet.has(tag))
+          const hasAny = cornerSet.size > 0 || tagsOnly.length > 0 || (stream.guests?.length ?? 0) > 0
+          if (!hasAny) return null
+
+          return (
+            <div className="flex flex-wrap gap-2">
+              {stream.corner_names?.map((cornerName) => (
+                <span key={cornerName} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{cornerName}</span>
+              ))}
+              {stream.guests?.map((guest) => (
+                <span key={guest} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyEntities(guest, entities)}</span>
+              ))}
+              {tagsOnly.map((tag) => (
+                <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{tag}</span>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* AI要約 */}
         {stream.summary && (
