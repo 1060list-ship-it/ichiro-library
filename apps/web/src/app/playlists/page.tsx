@@ -6,10 +6,12 @@ import type { Playlist } from '@/lib/types'
 
 type PlaylistStreamCountRow = {
   playlist_id: string
+  streams: { stream_date: string } | { stream_date: string }[] | null
 }
 
 type PlaylistCardData = PlaylistListItem & {
   stream_count: number
+  earliest_stream_date: string | null
 }
 
 type PlaylistListItem = Pick<Playlist, 'id' | 'title' | 'description' | 'created_at'>
@@ -34,7 +36,7 @@ export default async function PlaylistsPage() {
   if (playlistRows.length > 0) {
     const { data: streamRows, error: streamRowsError } = await supabase
       .from('playlist_streams')
-      .select('playlist_id')
+      .select('playlist_id, streams(stream_date)')
       .in('playlist_id', playlistRows.map((playlist) => playlist.id))
 
     if (streamRowsError) {
@@ -42,14 +44,23 @@ export default async function PlaylistsPage() {
     }
 
     const countByPlaylist = new Map<string, number>()
+    const earliestDateByPlaylist = new Map<string, string>()
 
     for (const row of (streamRows ?? []) as unknown as PlaylistStreamCountRow[]) {
       countByPlaylist.set(row.playlist_id, (countByPlaylist.get(row.playlist_id) ?? 0) + 1)
+      const stream = Array.isArray(row.streams) ? row.streams[0] : row.streams
+      if (stream?.stream_date) {
+        const current = earliestDateByPlaylist.get(row.playlist_id)
+        if (!current || stream.stream_date < current) {
+          earliestDateByPlaylist.set(row.playlist_id, stream.stream_date)
+        }
+      }
     }
 
     playlistCards = playlistRows.map((playlist) => ({
       ...playlist,
       stream_count: countByPlaylist.get(playlist.id) ?? 0,
+      earliest_stream_date: earliestDateByPlaylist.get(playlist.id) ?? null,
     }))
   }
 

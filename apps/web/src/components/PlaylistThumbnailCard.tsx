@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import type { Playlist } from '@/lib/types'
 
-type PlaylistCardData = Pick<Playlist, 'id' | 'title' | 'description' | 'created_at'> & {
+type PlaylistCardData = Pick<Playlist, 'id' | 'title' | 'description'> & {
   stream_count: number
+  earliest_stream_date: string | null
 }
 
 type Props = {
@@ -22,7 +23,9 @@ export default function PlaylistThumbnailCard({ playlist }: Props) {
           </p>
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span>{playlist.stream_count.toLocaleString()}本</span>
-            <span>{new Date(playlist.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+            {playlist.earliest_stream_date && (
+              <span>{new Date(playlist.earliest_stream_date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}〜</span>
+            )}
           </div>
         </div>
       </article>
