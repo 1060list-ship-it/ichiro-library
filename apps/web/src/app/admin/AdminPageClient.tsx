@@ -484,14 +484,22 @@ export default function AdminPageClient({ logoutAction }: { logoutAction: () => 
             <h1 className="text-lg font-semibold">ichiro library 管理画面</h1>
             <p className="mt-1 text-sm text-gray-400">配信メタデータの確認と手動修正</p>
           </div>
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-500 hover:text-white"
+          <div className="flex items-center gap-3">
+            <Link
+              href="/member"
+              className="text-sm text-gray-500 transition hover:text-gray-300"
             >
-              ログアウト
-            </button>
-          </form>
+              プレイリスト管理
+            </Link>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-500 hover:text-white"
+              >
+                ログアウト
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

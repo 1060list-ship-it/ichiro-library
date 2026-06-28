@@ -118,7 +118,7 @@ export default function PublicSiteHeader() {
           {isAuthenticated === true && (
             <>
               <Link
-                href="/member"
+                href="/admin"
                 className="rounded border border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
               >
                 管理
