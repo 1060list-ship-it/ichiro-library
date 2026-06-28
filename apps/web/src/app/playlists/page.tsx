@@ -4,29 +4,16 @@ import { PUBLIC_PLAYLIST_LIST_SELECT } from '@/lib/selects'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import type { Playlist } from '@/lib/types'
 
-type ThumbnailRelation = {
-  thumbnail_url: string | null
-}
-
-type PlaylistStreamThumbnailRow = {
+type PlaylistStreamCountRow = {
   playlist_id: string
-  streams: ThumbnailRelation | ThumbnailRelation[] | null
 }
 
 type PlaylistCardData = PlaylistListItem & {
   stream_count: number
-  thumbnail_url: string | null
 }
 
-type PlaylistListItem = Pick<Playlist, 'id' | 'title' | 'description'>
+type PlaylistListItem = Pick<Playlist, 'id' | 'title' | 'description' | 'created_at'>
 
-function takeFirstRelation<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) {
-    return value[0] ?? null
-  }
-
-  return value ?? null
-}
 
 export default async function PlaylistsPage() {
   const supabase = await createSupabaseServerClient()
@@ -45,34 +32,24 @@ export default async function PlaylistsPage() {
   let playlistCards: PlaylistCardData[] = []
 
   if (playlistRows.length > 0) {
-    const { data: firstStreams, error: firstStreamsError } = await supabase
+    const { data: streamRows, error: streamRowsError } = await supabase
       .from('playlist_streams')
-      .select('playlist_id, streams(thumbnail_url)')
+      .select('playlist_id')
       .in('playlist_id', playlistRows.map((playlist) => playlist.id))
-      .order('position', { ascending: true })
 
-    if (firstStreamsError) {
-      throw new Error(`playlist_streams fetch failed: ${firstStreamsError.message}`)
+    if (streamRowsError) {
+      throw new Error(`playlist_streams fetch failed: ${streamRowsError.message}`)
     }
 
     const countByPlaylist = new Map<string, number>()
-    const thumbnailByPlaylist = new Map<string, string | null>()
 
-    for (const row of (firstStreams ?? []) as PlaylistStreamThumbnailRow[]) {
+    for (const row of (streamRows ?? []) as PlaylistStreamCountRow[]) {
       countByPlaylist.set(row.playlist_id, (countByPlaylist.get(row.playlist_id) ?? 0) + 1)
-
-      if (!thumbnailByPlaylist.has(row.playlist_id)) {
-        thumbnailByPlaylist.set(
-          row.playlist_id,
-          takeFirstRelation(row.streams)?.thumbnail_url ?? null,
-        )
-      }
     }
 
     playlistCards = playlistRows.map((playlist) => ({
       ...playlist,
       stream_count: countByPlaylist.get(playlist.id) ?? 0,
-      thumbnail_url: thumbnailByPlaylist.get(playlist.id) ?? null,
     }))
   }
 

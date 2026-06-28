@@ -28,6 +28,7 @@ import {
   removeStreamFromPlaylist,
   reorderPlaylistStream,
   submitEntityWordRequest,
+  toggleBookmark,
   updatePlaylist,
 } from './actions'
 
@@ -834,6 +835,11 @@ export default function MemberPageClient({
         busy: false,
         itemId: null,
       })
+
+      if (bookmarkedOnly) {
+        void toggleBookmark(stream.id).catch(() => undefined)
+        setSearchResults((prev) => prev.filter((s) => s.id !== stream.id))
+      }
     } catch (error) {
       console.error(error)
       updatePlaylistState(playlistId, (current) => ({
@@ -1179,8 +1185,20 @@ export default function MemberPageClient({
 
             <div className="mt-6 space-y-4">
               {playlists.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-gray-800 bg-gray-950/60 px-5 py-8 text-sm text-gray-400">
-                  まだプレイリストがない。一本作れば、ここが編集台になる。
+                <div className="rounded-3xl border border-dashed border-gray-800 bg-gray-950/60 px-6 py-8">
+                  <p className="text-sm font-medium text-gray-300">プレイリストの作り方</p>
+                  <ol className="mt-4 space-y-4">
+                    {([
+                      { step: '01', text: '配信ページを開いて ♥ をタップ。気になる配信をブックマークしておく。' },
+                      { step: '02', text: '上のフォームでプレイリストを作成。タイトルと説明を入れて「作成」を押すと編集モードが開く。' },
+                      { step: '03', text: '編集エリアの「☆ ブックマーク済みのみ」を押してブックマーク一覧を表示し、＋ で追加。追加した配信のブックマークは自動で解除される。' },
+                    ] as const).map(({ step, text }) => (
+                      <li key={step} className="flex items-start gap-4">
+                        <span className="flex-shrink-0 text-xs font-semibold tabular-nums text-gray-600">{step}</span>
+                        <p className="text-sm leading-6 text-gray-400">{text}</p>
+                      </li>
+                    ))}
+                  </ol>
                 </div>
               ) : (
                 playlists.map((playlist) => {

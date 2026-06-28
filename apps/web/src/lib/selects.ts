@@ -87,6 +87,7 @@ export const PUBLIC_PLAYLIST_LIST_SELECT = [
   'id',
   'title',
   'description',
+  'created_at',
 ].join(', ')
 
 export const PUBLIC_MAGAZINE_SELECT = [

@@ -10,10 +10,15 @@ import {
   enqueueJob,
   fetchAdminDashboard,
   fetchAdminStreamsPage,
+  fetchBookmarkedStreams,
   fetchRecentJobs,
   searchAdminStreams,
   setAdminStreamReviewed,
 } from './actions'
+
+type AdminBookmarkedStream = Awaited<ReturnType<typeof fetchBookmarkedStreams>>[number]
+
+const UNREVIEWED_INITIAL_LIMIT = 5
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ja-JP', {
@@ -308,6 +313,10 @@ export default function AdminPageClient({
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null)
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null)
   const [clearingJobs, setClearingJobs] = useState(false)
+  const [bookmarks, setBookmarks] = useState<AdminBookmarkedStream[]>([])
+  const [bookmarksLoading, setBookmarksLoading] = useState(true)
+  const [bookmarksError, setBookmarksError] = useState('')
+  const [showAllUnreviewed, setShowAllUnreviewed] = useState(false)
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -349,11 +358,23 @@ export default function AdminPageClient({
     }
   }, [])
 
+  const loadBookmarks = useCallback(async () => {
+    try {
+      const data = await fetchBookmarkedStreams()
+      setBookmarks(data)
+      setBookmarksError('')
+    } catch {
+      setBookmarksError('ブックマークの取得に失敗しました。')
+    } finally {
+      setBookmarksLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     queueMicrotask(() => {
-      void Promise.all([loadDashboardData(), loadInitialStreams(), loadJobs()])
+      void Promise.all([loadDashboardData(), loadInitialStreams(), loadJobs(), loadBookmarks()])
     })
-  }, [loadDashboardData, loadInitialStreams, loadJobs])
+  }, [loadDashboardData, loadInitialStreams, loadJobs, loadBookmarks])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -504,6 +525,12 @@ export default function AdminPageClient({
             <p className="mt-1 text-sm text-gray-400">配信メタデータの確認と手動修正</p>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="text-sm text-gray-500 transition hover:text-gray-300"
+            >
+              ← トップへ
+            </Link>
             <Link
               href="/member"
               className="text-sm text-gray-500 transition hover:text-gray-300"
@@ -658,14 +685,74 @@ export default function AdminPageClient({
               {dashboard.unreviewedStreams.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-gray-500">未レビュー動画はありません。</p>
               ) : (
+                <>
+                  <div className="divide-y divide-gray-800">
+                    {(showAllUnreviewed
+                      ? dashboard.unreviewedStreams
+                      : dashboard.unreviewedStreams.slice(0, UNREVIEWED_INITIAL_LIMIT)
+                    ).map((stream) => (
+                      <StreamRow
+                        key={stream.id}
+                        stream={stream}
+                        toggling={togglingVideoIds.includes(stream.video_id)}
+                        onToggleReviewed={handleToggleReviewed}
+                      />
+                    ))}
+                  </div>
+                  {dashboard.unreviewedStreams.length > UNREVIEWED_INITIAL_LIMIT && (
+                    <div className="border-t border-gray-800 px-5 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllUnreviewed((prev) => !prev)}
+                        className="text-sm text-gray-400 hover:text-white"
+                      >
+                        {showAllUnreviewed
+                          ? '折りたたむ'
+                          : `あと ${dashboard.unreviewedStreams.length - UNREVIEWED_INITIAL_LIMIT} 件を表示`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-gray-800 bg-gray-900">
+              <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+                <div>
+                  <h2 className="text-base font-semibold">ブックマーク</h2>
+                  <p className="mt-1 text-sm text-gray-400">プレイリスト作成用に仮置きした配信一覧</p>
+                </div>
+                <Link
+                  href="/member"
+                  className="text-sm text-gray-500 transition hover:text-gray-300"
+                >
+                  プレイリスト管理 →
+                </Link>
+              </div>
+
+              {bookmarksLoading ? (
+                <p className="px-5 py-6 text-sm text-gray-500">読み込み中...</p>
+              ) : bookmarksError ? (
+                <p className="px-5 py-6 text-sm text-red-400">{bookmarksError}</p>
+              ) : bookmarks.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-gray-500">ブックマークはありません。</p>
+              ) : (
                 <div className="divide-y divide-gray-800">
-                  {dashboard.unreviewedStreams.map((stream) => (
-                    <StreamRow
-                      key={stream.id}
-                      stream={stream}
-                      toggling={togglingVideoIds.includes(stream.video_id)}
-                      onToggleReviewed={handleToggleReviewed}
-                    />
+                  {bookmarks.map((stream) => (
+                    <div key={stream.id} className="flex items-center justify-between gap-4 px-5 py-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{stream.title}</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {new Date(stream.stream_date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/stream/${stream.video_id}`}
+                        className="flex-shrink-0 text-sm text-gray-400 underline decoration-gray-700 underline-offset-4 hover:text-white"
+                      >
+                        ページを見る
+                      </Link>
+                    </div>
                   ))}
                 </div>
               )}

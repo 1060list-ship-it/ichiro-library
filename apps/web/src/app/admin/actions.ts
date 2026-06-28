@@ -1134,3 +1134,5 @@ export async function scrutinizeStreamSummary(videoId: string): Promise<Scrutiny
 
   return { entities }
 }
+
+export { fetchBookmarkedStreams } from '../member/actions'
