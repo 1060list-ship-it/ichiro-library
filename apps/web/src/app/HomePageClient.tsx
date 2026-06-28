@@ -46,6 +46,8 @@ export default function HomePageClient({
 }: Props) {
   const router = useRouter()
   const isFirstFetch = useRef(true)
+  const pendingSearchLogQueryRef = useRef(initialState.query.trim() || null)
+  const hasLoggedInitialSearchRef = useRef(false)
 
   const [view, setView] = useState(initialState.view)
   const [query, setQuery] = useState(initialState.query)
@@ -100,8 +102,31 @@ export default function HomePageClient({
     router.replace(queryString ? `?${queryString}` : '/', { scroll: false })
   }, [query, view, fuzzy, year, activeFilter, router])
 
+  const logSearch = useCallback((searchQuery: string, matchedCount: number) => {
+    void supabase
+      .from('search_logs')
+      .insert({
+        query: searchQuery,
+        result_count: matchedCount,
+        user_id: currentUserId,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('Failed to insert search log', error)
+        }
+      })
+  }, [currentUserId])
+
+  useEffect(() => {
+    const trimmedQuery = debouncedQuery.trim()
+    pendingSearchLogQueryRef.current = trimmedQuery.length > 0 ? trimmedQuery : null
+  }, [debouncedQuery])
+
   const fetchStreams = useCallback(async () => {
     setLoading(true)
+    const trimmedQuery = debouncedQuery.trim()
+    const shouldLogSearch =
+      trimmedQuery.length > 0 && pendingSearchLogQueryRef.current === trimmedQuery
 
     const result = await fetchHomePageStreams(supabase, {
       view,
@@ -114,7 +139,12 @@ export default function HomePageClient({
     setStreams(result.streams)
     setResultCount(result.resultCount)
     setLoading(false)
-  }, [activeFilter, debouncedQuery, fuzzy, view, year])
+
+    if (shouldLogSearch) {
+      pendingSearchLogQueryRef.current = null
+      logSearch(trimmedQuery, result.resultCount)
+    }
+  }, [activeFilter, debouncedQuery, fuzzy, logSearch, view, year])
 
   useEffect(() => {
     if (isFirstFetch.current) {
@@ -124,6 +154,23 @@ export default function HomePageClient({
 
     void fetchStreams()
   }, [fetchStreams])
+
+  useEffect(() => {
+    if (hasLoggedInitialSearchRef.current) {
+      return
+    }
+
+    hasLoggedInitialSearchRef.current = true
+
+    const trimmedQuery = debouncedQuery.trim()
+    if (trimmedQuery.length === 0) {
+      pendingSearchLogQueryRef.current = null
+      return
+    }
+
+    pendingSearchLogQueryRef.current = null
+    logSearch(trimmedQuery, resultCount)
+  }, [debouncedQuery, logSearch, resultCount])
 
   const isSearching = debouncedQuery.trim().length > 0
   const parsedDisplay = parseJapaneseDateFromQuery(debouncedQuery.trim())

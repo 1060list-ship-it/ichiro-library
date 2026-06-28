@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob } from './actions'
+import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob, SearchLogStats } from './actions'
 import {
   cancelPipelineJob,
   clearFinishedJobs,
@@ -21,6 +21,17 @@ function formatDate(value: string) {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function formatSearchLogDate(value: string) {
+  const date = new Date(`${value}T00:00:00+09:00`)
+
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('ja-JP', {
+      month: 'short',
+      day: 'numeric',
+    })
 }
 
 function formatDateTime(value: string | null) {
@@ -265,7 +276,15 @@ function JobTable({
   )
 }
 
-export default function AdminPageClient({ logoutAction }: { logoutAction: () => Promise<void> }) {
+export default function AdminPageClient({
+  logoutAction,
+  initialSearchLogStats,
+  searchLogStatsError,
+}: {
+  logoutAction: () => Promise<void>
+  initialSearchLogStats: SearchLogStats
+  searchLogStatsError: string | null
+}) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null)
@@ -810,6 +829,79 @@ export default function AdminPageClient({ logoutAction }: { logoutAction: () => 
                   ))}
                 </div>
               )}
+            </section>
+
+            <section className="rounded-xl border border-gray-800 bg-gray-900">
+              <div className="border-b border-gray-800 px-5 py-4">
+                <h2 className="text-base font-semibold">検索ログ集計</h2>
+                <p className="mt-1 text-sm text-gray-400">よく使われる検索語と、直近30日の検索数をまとめています。</p>
+              </div>
+
+              <div className="grid gap-6 px-5 py-5 lg:grid-cols-2">
+                <div className="rounded-xl border border-gray-800 bg-gray-950/50">
+                  <div className="border-b border-gray-800 px-4 py-3">
+                    <h3 className="text-sm font-semibold text-white">上位検索ワード（Top 20）</h3>
+                    <p className="mt-1 text-xs text-gray-500">同一クエリを集計した件数順</p>
+                  </div>
+
+                  {searchLogStatsError ? (
+                    <p className="px-4 py-4 text-sm text-red-400">{searchLogStatsError}</p>
+                  ) : initialSearchLogStats.topQueries.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-gray-500">検索ログはまだありません。</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-800 text-sm">
+                        <thead className="bg-gray-950/40 text-left text-xs uppercase tracking-wide text-gray-500">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">ワード</th>
+                            <th className="px-4 py-3 text-right font-medium">件数</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {initialSearchLogStats.topQueries.map((item) => (
+                            <tr key={item.query}>
+                              <td className="px-4 py-3 text-gray-200">{item.query}</td>
+                              <td className="px-4 py-3 text-right text-gray-300">{item.count.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-gray-800 bg-gray-950/50">
+                  <div className="border-b border-gray-800 px-4 py-3">
+                    <h3 className="text-sm font-semibold text-white">日別検索件数（直近30日）</h3>
+                    <p className="mt-1 text-xs text-gray-500">Asia/Tokyo 基準の日次件数</p>
+                  </div>
+
+                  {searchLogStatsError ? (
+                    <p className="px-4 py-4 text-sm text-red-400">{searchLogStatsError}</p>
+                  ) : initialSearchLogStats.dailyCounts.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-gray-500">直近30日の検索ログはありません。</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-800 text-sm">
+                        <thead className="bg-gray-950/40 text-left text-xs uppercase tracking-wide text-gray-500">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">日付</th>
+                            <th className="px-4 py-3 text-right font-medium">件数</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {initialSearchLogStats.dailyCounts.map((item) => (
+                            <tr key={item.date}>
+                              <td className="px-4 py-3 text-gray-200">{formatSearchLogDate(item.date)}</td>
+                              <td className="px-4 py-3 text-right text-gray-300">{item.count.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
           </>
         ) : null}

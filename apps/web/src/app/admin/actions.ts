@@ -84,6 +84,11 @@ export type AdminStreamPage = {
   hasMore: boolean
 }
 
+export type SearchLogStats = {
+  topQueries: { query: string; count: number }[]
+  dailyCounts: { date: string; count: number }[]
+}
+
 export type EnqueueJobInput =
   | { kind: 'fetch_new'; days?: number; maxVideos?: number }
   | { kind: 'reprocess' }
@@ -105,6 +110,9 @@ export type PipelineJob = {
 type StreamUpdate = Database['public']['Tables']['streams']['Update']
 type ChapterInsert = Database['public']['Tables']['chapters']['Insert']
 type AdminStreamUpdate = StreamUpdate & { highlights?: Highlight[] | null }
+type SearchLogRow = Database['public']['Tables']['search_logs']['Row']
+type SearchLogQueryRow = Pick<SearchLogRow, 'query'>
+type SearchLogDateRow = Pick<SearchLogRow, 'searched_at'>
 
 const ADMIN_STREAM_SELECT_BASE = `
   id,
@@ -130,6 +138,15 @@ const ADMIN_STREAM_SELECT_WITH_LIVE_VIEWING = `
   has_live_viewing
 `
 
+const SEARCH_LOG_BATCH_SIZE = 1000
+const SEARCH_LOG_DAILY_WINDOW_DAYS = 30
+const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
 function isMissingLiveViewingColumn(error: unknown) {
   if (!error || typeof error !== 'object') {
     return false
@@ -149,6 +166,31 @@ function normalizeCsv(value: string) {
     .filter(Boolean)
 
   return items.length > 0 ? items : null
+}
+
+async function fetchAllSearchLogPages<T>(fetchPage: (offset: number, limit: number) => Promise<T[]>) {
+  const rows: T[] = []
+
+  for (let offset = 0; ; offset += SEARCH_LOG_BATCH_SIZE) {
+    const page = await fetchPage(offset, SEARCH_LOG_BATCH_SIZE)
+    rows.push(...page)
+
+    if (page.length < SEARCH_LOG_BATCH_SIZE) {
+      break
+    }
+  }
+
+  return rows
+}
+
+function formatTokyoDate(value: string) {
+  const parts = TOKYO_DATE_FORMATTER.formatToParts(new Date(value))
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? ''
+  const month = parts.find((part) => part.type === 'month')?.value ?? ''
+  const day = parts.find((part) => part.type === 'day')?.value ?? ''
+
+  return `${year}-${month}-${day}`
 }
 
 async function findStreamIdByVideoId(videoId: string): Promise<string | null> {
@@ -224,6 +266,67 @@ export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
     },
     unreviewedStreams: unreviewedStreamsResult.data ?? [],
     failedStreams: failedStreamsResult.data ?? [],
+  }
+}
+
+export async function fetchSearchLogStats(): Promise<SearchLogStats> {
+  await requireRole(['admin'])
+
+  const dailyWindowStart = new Date(Date.now() - SEARCH_LOG_DAILY_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const [topQueryRows, dailyRows] = await Promise.all([
+    fetchAllSearchLogPages<SearchLogQueryRow>(async (offset, limit) => {
+      const { data, error } = await supabaseAdmin
+        .from('search_logs')
+        .select('query')
+        .order('searched_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      if (error) {
+        throw error
+      }
+
+      return (data ?? []) as SearchLogQueryRow[]
+    }),
+    fetchAllSearchLogPages<SearchLogDateRow>(async (offset, limit) => {
+      const { data, error } = await supabaseAdmin
+        .from('search_logs')
+        .select('searched_at')
+        .gte('searched_at', dailyWindowStart)
+        .order('searched_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      if (error) {
+        throw error
+      }
+
+      return (data ?? []) as SearchLogDateRow[]
+    }),
+  ])
+
+  const queryCounts = new Map<string, number>()
+  for (const row of topQueryRows) {
+    const nextCount = (queryCounts.get(row.query) ?? 0) + 1
+    queryCounts.set(row.query, nextCount)
+  }
+
+  const dailyCountsMap = new Map<string, number>()
+  for (const row of dailyRows) {
+    if (!row.searched_at) {
+      continue
+    }
+
+    const date = formatTokyoDate(row.searched_at)
+    dailyCountsMap.set(date, (dailyCountsMap.get(date) ?? 0) + 1)
+  }
+
+  return {
+    topQueries: [...queryCounts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'ja'))
+      .slice(0, 20)
+      .map(([query, count]) => ({ query, count })),
+    dailyCounts: [...dailyCountsMap.entries()]
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([date, count]) => ({ date, count })),
   }
 }
 

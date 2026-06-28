@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import PlaylistStreamRow from '@/components/PlaylistStreamRow'
 import type { Playlist, Stream, UserRole } from '@/lib/types'
@@ -15,14 +15,144 @@ type Props = {
   role: UserRole | null
 }
 
+let youtubeIframeApiPromise: Promise<typeof window.YT> | null = null
+
+function loadYouTubeIframeApi() {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('YouTube IFrame API can only be loaded in the browser'))
+  }
+
+  if (window.YT?.Player) {
+    return Promise.resolve(window.YT)
+  }
+
+  if (youtubeIframeApiPromise) {
+    return youtubeIframeApiPromise
+  }
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://www.youtube.com/iframe_api"]',
+    )
+
+    const cleanup = () => {
+      window.onYouTubeIframeAPIReady = null
+    }
+
+    window.onYouTubeIframeAPIReady = () => {
+      cleanup()
+
+      if (window.YT?.Player) {
+        resolve(window.YT)
+        return
+      }
+
+      reject(new Error('YouTube IFrame API loaded without window.YT.Player'))
+    }
+
+    if (existingScript) {
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://www.youtube.com/iframe_api'
+    script.async = true
+    script.onerror = () => {
+      cleanup()
+      youtubeIframeApiPromise = null
+      reject(new Error('Failed to load YouTube IFrame API'))
+    }
+
+    document.body.appendChild(script)
+  })
+
+  return youtubeIframeApiPromise
+}
+
 export default function PlaylistPlayer({ playlist, streams, role }: Props) {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(streams[0]?.video_id ?? null)
   const [bookmarkedStreamMap, setBookmarkedStreamMap] = useState<Record<string, boolean>>({})
   const [bookmarkPending, startBookmarkTransition] = useTransition()
+  const playerHostRef = useRef<HTMLDivElement | null>(null)
+  const playerRef = useRef<YT.Player | null>(null)
+  const isPlayerReadyRef = useRef(false)
+  const activeVideoIdRef = useRef(activeVideoId)
 
   const activeStream = streams.find((stream) => stream.video_id === activeVideoId) ?? streams[0] ?? null
   const canBookmark = role === 'editor' || role === 'admin'
   const isBookmarked = activeStream ? bookmarkedStreamMap[activeStream.id] ?? false : false
+
+  useEffect(() => {
+    activeVideoIdRef.current = activeVideoId
+  }, [activeVideoId])
+
+  useEffect(() => {
+    if (!playerHostRef.current || !activeVideoIdRef.current) {
+      return
+    }
+
+    let cancelled = false
+
+    loadYouTubeIframeApi()
+      .then((YT) => {
+        if (cancelled || !playerHostRef.current || !activeVideoIdRef.current) {
+          return
+        }
+
+        playerRef.current?.destroy()
+
+        playerRef.current = new YT.Player(playerHostRef.current, {
+          videoId: activeVideoIdRef.current,
+          playerVars: {
+            autoplay: 1,
+            rel: 0,
+          },
+          events: {
+            onReady: () => {
+              isPlayerReadyRef.current = true
+            },
+            onStateChange: (event) => {
+              if (event.data !== YT.PlayerState.ENDED) {
+                return
+              }
+
+              const currentIndex = streams.findIndex((stream) => stream.video_id === activeVideoIdRef.current)
+              const nextStream = currentIndex >= 0 ? streams[currentIndex + 1] : null
+
+              if (!nextStream) {
+                return
+              }
+
+              setActiveVideoId(nextStream.video_id)
+            },
+          },
+        })
+      })
+      .catch((error) => {
+        console.error(error)
+      })
+
+    return () => {
+      cancelled = true
+      isPlayerReadyRef.current = false
+      playerRef.current?.destroy()
+      playerRef.current = null
+    }
+  }, [streams])
+
+  useEffect(() => {
+    const player = playerRef.current
+
+    if (!player || !activeVideoId || !isPlayerReadyRef.current) {
+      return
+    }
+
+    if (player.getVideoData().video_id === activeVideoId) {
+      return
+    }
+
+    player.loadVideoById(activeVideoId)
+  }, [activeVideoId])
 
   function handleBookmark() {
     if (!activeStream) {
@@ -57,13 +187,11 @@ export default function PlaylistPlayer({ playlist, streams, role }: Props) {
           <section className="space-y-4 md:sticky md:top-0 md:h-fit">
             {activeStream ? (
               <div className="overflow-hidden rounded-2xl border border-gray-800 bg-black">
-                <iframe
-                  key={activeVideoId}
-                  src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1`}
-                  title={activeStream.title}
-                  className="w-full aspect-video"
-                  allow="autoplay; encrypted-media"
-                  allowFullScreen
+                <div
+                  id="yt-player"
+                  ref={playerHostRef}
+                  className="aspect-video w-full"
+                  aria-label={activeStream.title}
                 />
               </div>
             ) : (
