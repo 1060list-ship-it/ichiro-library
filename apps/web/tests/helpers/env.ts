@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const ENV_FILE_PATH = path.resolve(process.cwd(), '.env.test')
+const OPTIONAL_ENV_FILE_PATHS = [
+  path.resolve(process.cwd(), '.env.local'),
+] as const
 
 const REQUIRED_KEYS = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -37,12 +40,12 @@ function stripWrappingQuotes(value: string) {
   return value
 }
 
-function loadEnvFile() {
-  if (envLoaded || !existsSync(ENV_FILE_PATH)) {
-    return
+function loadEnvFileAt(filePath: string, overwrite: boolean) {
+  if (!existsSync(filePath)) {
+    return false
   }
 
-  const content = readFileSync(ENV_FILE_PATH, 'utf8')
+  const content = readFileSync(filePath, 'utf8')
 
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim()
@@ -58,9 +61,27 @@ function loadEnvFile() {
 
     const key = trimmed.slice(0, separatorIndex).trim()
     const rawValue = trimmed.slice(separatorIndex + 1).trim()
+
+    if (!overwrite && process.env[key]) {
+      continue
+    }
+
     process.env[key] = stripWrappingQuotes(rawValue)
   }
 
+  return true
+}
+
+function loadEnvFile() {
+  if (envLoaded || !existsSync(ENV_FILE_PATH)) {
+    return
+  }
+
+  for (const optionalEnvPath of OPTIONAL_ENV_FILE_PATHS) {
+    loadEnvFileAt(optionalEnvPath, false)
+  }
+
+  loadEnvFileAt(ENV_FILE_PATH, true)
   envLoaded = true
 }
 

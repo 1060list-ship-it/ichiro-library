@@ -1,12 +1,156 @@
 import Link from 'next/link'
 import { requireRoleOrRedirect } from '@/lib/auth'
 import { logoutAction } from '@/lib/auth-actions'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import type { Entity, EntityWordRequest, Playlist, PlaylistStream, Stream } from '@/lib/types'
 import MemberPageClient from './MemberPageClient'
+
+const MEMBER_PLAYLIST_SELECT = [
+  'id',
+  'title',
+  'description',
+  'created_at',
+  'updated_at',
+].join(', ')
+
+const MEMBER_STREAM_SELECT = [
+  'id',
+  'video_id',
+  'title',
+  'stream_date',
+  'tags',
+  'corner_names',
+].join(', ')
+
+const MEMBER_ENTITY_SELECT = [
+  'id',
+  'name',
+].join(', ')
+
+const MEMBER_ENTITY_REQUEST_SELECT = [
+  'id',
+  'entity_id',
+  'word',
+  'status',
+  'requested_by',
+  'reviewed_by',
+  'requested_at',
+  'reviewed_at',
+].join(', ')
+
+type MemberPlaylist = Pick<Playlist, 'id' | 'title' | 'description' | 'created_at' | 'updated_at'> & {
+  items: MemberPlaylistItem[]
+}
+
+type MemberPlaylistItem = Pick<PlaylistStream, 'id' | 'playlist_id' | 'stream_id' | 'position' | 'added_at'> & {
+  stream: Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'tags' | 'corner_names'>
+}
+
+type PlaylistListItem = Pick<Playlist, 'id' | 'title' | 'description' | 'created_at' | 'updated_at'>
+type MemberStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'tags' | 'corner_names'>
+type MemberEntity = Pick<Entity, 'id' | 'name'>
+type MemberEntityRequest = Pick<
+  EntityWordRequest,
+  'id' | 'entity_id' | 'word' | 'status' | 'requested_by' | 'reviewed_by' | 'requested_at' | 'reviewed_at'
+>
+type PlaylistStreamJoinRow = Pick<PlaylistStream, 'id' | 'playlist_id' | 'stream_id' | 'position' | 'added_at'> & {
+  streams: MemberStream | MemberStream[] | null
+}
+
+function takeFirstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null
+  }
+
+  return value ?? null
+}
 
 export default async function MemberPage() {
   const session = await requireRoleOrRedirect(['editor', 'admin'], '/member')
 
   const email = session.user?.email ?? 'unknown'
+  const currentUser = {
+    id: session.user.id,
+    email,
+  }
+
+  const { data: playlists, error: playlistsError } = await supabaseAdmin
+    .from('playlists')
+    .select(MEMBER_PLAYLIST_SELECT)
+    .order('updated_at', { ascending: false })
+
+  if (playlistsError) {
+    throw new Error(`member playlists fetch failed: ${playlistsError.message}`)
+  }
+
+  const playlistRows = (playlists ?? []) as PlaylistListItem[]
+  const playlistIds = playlistRows.map((playlist) => playlist.id)
+  const playlistItemsById = new Map<string, MemberPlaylistItem[]>()
+
+  if (playlistIds.length > 0) {
+    const { data: playlistStreamRows, error: playlistStreamError } = await supabaseAdmin
+      .from('playlist_streams')
+      .select(`id, playlist_id, stream_id, position, added_at, streams(${MEMBER_STREAM_SELECT})`)
+      .in('playlist_id', playlistIds)
+      .order('playlist_id', { ascending: true })
+      .order('position', { ascending: true })
+
+    if (playlistStreamError) {
+      throw new Error(`member playlist streams fetch failed: ${playlistStreamError.message}`)
+    }
+
+    for (const row of (playlistStreamRows ?? []) as PlaylistStreamJoinRow[]) {
+      const stream = takeFirstRelation(row.streams)
+
+      if (!stream) {
+        continue
+      }
+
+      const items = playlistItemsById.get(row.playlist_id) ?? []
+      items.push({
+        id: row.id,
+        playlist_id: row.playlist_id,
+        stream_id: row.stream_id,
+        position: row.position,
+        added_at: row.added_at,
+        stream,
+      })
+      playlistItemsById.set(row.playlist_id, items)
+    }
+  }
+
+  const initialPlaylists: MemberPlaylist[] = playlistRows.map((playlist) => ({
+    ...playlist,
+    items: playlistItemsById.get(playlist.id) ?? [],
+  }))
+
+  const [{ data: entities, error: entitiesError }, requestResult] = await Promise.all([
+    supabaseAdmin
+      .from('entities')
+      .select(MEMBER_ENTITY_SELECT)
+      .order('name', { ascending: true }),
+    session.role === 'admin'
+      ? supabaseAdmin
+        .from('entity_word_requests')
+        .select(MEMBER_ENTITY_REQUEST_SELECT)
+        .order('requested_at', { ascending: false })
+      : supabaseAdmin
+        .from('entity_word_requests')
+        .select(MEMBER_ENTITY_REQUEST_SELECT)
+        .eq('requested_by', session.user.id)
+        .order('requested_at', { ascending: false }),
+  ])
+
+  if (entitiesError) {
+    throw new Error(`member entities fetch failed: ${entitiesError.message}`)
+  }
+
+  if (requestResult.error) {
+    throw new Error(`member entity requests fetch failed: ${requestResult.error.message}`)
+  }
+
+  const initialEntities = (entities ?? []) as MemberEntity[]
+  const initialRequests = (requestResult.data ?? []) as MemberEntityRequest[]
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -30,7 +174,7 @@ export default async function MemberPage() {
                 Member Console
               </h1>
               <p className="max-w-2xl text-sm leading-7 text-gray-400">
-                編集用の土台だけ先に通した。ここからプレイリストとブックマークを積み上げる。
+                プレイリストの編集とエンティティ申請をまとめて触れる。触り心地まで含めて、ここを作業台にする。
               </p>
             </div>
 
@@ -61,7 +205,13 @@ export default async function MemberPage() {
         </header>
 
         <div className="mt-6">
-          <MemberPageClient />
+          <MemberPageClient
+            currentUser={currentUser}
+            role={session.role}
+            initialPlaylists={initialPlaylists}
+            initialEntities={initialEntities}
+            initialRequests={initialRequests}
+          />
         </div>
       </div>
     </main>

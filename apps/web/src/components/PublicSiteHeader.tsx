@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 
 const NAV_ITEMS = [
   { href: '/', label: '配信一覧' },
+  { href: '/playlists', label: 'プレイリスト' },
   { href: '/magazine', label: 'マガジン' },
 ]
 

@@ -34,11 +34,7 @@ test.describe('RLS', () => {
     }
   })
 
-  // column-level REVOKE は table-level GRANT SELECT で無効化される PostgreSQL 制限。
-  // PostgREST は table-level SELECT がないと API 経由でテーブルを公開できないため、
-  // transcript 列は authenticated ロールから直接アクセス可能な状態のまま。
-  // 対策は設計書 Phase 2 (VIEW による列制限) で実装予定。
-  test.fixme('editor セッションで streams.transcript を直接 SELECT すると 42501 になる', async () => {
+  test('editor セッションで streams.transcript を直接 SELECT すると 42501 になる', async () => {
     const supabase = await getSupabaseRoleClient('editor')
     const { error } = await supabase.from('streams').select('transcript').limit(1)
 

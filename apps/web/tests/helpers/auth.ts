@@ -5,12 +5,14 @@ import { getTestEnv, type TestEnv } from './env'
 
 export type TestRole = 'editor' | 'admin' | 'revoked'
 
-const APP_BASE_URL = 'http://localhost:3000'
-
 type StoredCookie = {
   name: string
   value: string
   options?: CookieOptions
+}
+
+export function getAppBaseUrl() {
+  return process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000'
 }
 
 function requireTestEnv(): TestEnv {
@@ -58,6 +60,8 @@ function toPlaywrightSameSite(sameSite?: CookieOptions['sameSite']) {
 
 function createCookieStore() {
   const cookies = new Map<string, StoredCookie>()
+  const appBaseUrl = getAppBaseUrl()
+  const appBaseUrlObject = new URL(appBaseUrl)
 
   return {
     getAll() {
@@ -77,10 +81,10 @@ function createCookieStore() {
       return Array.from(cookies.values()).map(({ name, value, options }) => ({
         name,
         value,
-        domain: 'localhost',
+        domain: appBaseUrlObject.hostname,
         path: options?.path ?? '/',
         httpOnly: options?.httpOnly ?? false,
-        secure: options?.secure ?? APP_BASE_URL.startsWith('https://'),
+        secure: options?.secure ?? appBaseUrl.startsWith('https://'),
         sameSite: toPlaywrightSameSite(options?.sameSite),
         expires: typeof options?.maxAge === 'number'
           ? Math.floor(Date.now() / 1_000) + options.maxAge
@@ -125,6 +129,16 @@ async function createAuthCookies(role: TestRole) {
   }
 
   return cookieStore.toPlaywrightCookies()
+}
+
+export async function createAuthCookieHeader(role: TestRole) {
+  const cookies = await createAuthCookies(role)
+  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
+}
+
+export async function createStaleAuthCookieHeader(role: TestRole = 'editor') {
+  const cookies = await createAuthCookies(role)
+  return cookies.map((cookie) => `${cookie.name}=stale-session`).join('; ')
 }
 
 export async function loginAs(page: Page, role: TestRole) {

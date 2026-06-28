@@ -8,6 +8,7 @@ export const PUBLIC_STREAM_CARD_SELECT = [
   'comment_count',
   'summary',
   'tags',
+  'corner_names',
   'thumbnail_url',
 ].join(', ')
 

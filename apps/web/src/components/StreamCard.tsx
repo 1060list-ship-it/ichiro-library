@@ -1,17 +1,23 @@
 import Link from 'next/link'
 import type { Stream } from '@/lib/types'
 
-type StreamCardStream = Pick<Stream, 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'thumbnail_url' | 'summary' | 'view_count' | 'comment_count' | 'tags'>
-type Props = { stream: StreamCardStream; rank?: number }
+type StreamCardStream = Pick<Stream, 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'thumbnail_url' | 'summary' | 'view_count' | 'comment_count' | 'tags' | 'corner_names'>
+type Props = {
+  stream: StreamCardStream
+  rank?: number
+  onFilterSelect?: (kind: 'tag' | 'corner', value: string) => void
+}
 
-export default function StreamCard({ stream, rank }: Props) {
+export default function StreamCard({ stream, rank, onFilterSelect }: Props) {
   const date = new Date(stream.stream_date).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
+  const cornerSet = new Set(stream.corner_names ?? [])
+  const tagsOnly = (stream.tags ?? []).filter((tag) => !cornerSet.has(tag))
 
   return (
-    <Link href={`/stream/${stream.video_id}`} className="block">
-      <div className="rounded-lg bg-gray-900 border border-gray-800 overflow-hidden hover:border-gray-600 transition-colors">
+    <div className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden transition-colors hover:border-gray-600">
+      <Link href={`/stream/${stream.video_id}`} className="block">
         {stream.thumbnail_url && (
           <div className="relative">
             <img
@@ -47,15 +53,32 @@ export default function StreamCard({ stream, rank }: Props) {
               <span className="text-xs text-gray-500">コメント {stream.comment_count.toLocaleString()}</span>
             )}
           </div>
-          <div className="flex flex-wrap gap-1">
-            {stream.tags?.slice(0, 4).map(tag => (
-              <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">
-                {tag}
-              </span>
-            ))}
-          </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      {(stream.corner_names?.length || tagsOnly.length) ? (
+        <div className="flex flex-wrap gap-1 border-t border-gray-800 px-3 pb-3 pt-1.5">
+          {stream.corner_names?.slice(0, 3).map((cornerName) => (
+            <button
+              key={cornerName}
+              type="button"
+              onClick={() => onFilterSelect?.('corner', cornerName)}
+              className="rounded-full bg-indigo-950 px-2 py-0.5 text-xs text-indigo-300 transition hover:bg-indigo-900 hover:text-indigo-200"
+            >
+              {cornerName}
+            </button>
+          ))}
+          {tagsOnly.slice(0, 4).map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => onFilterSelect?.('tag', tag)}
+              className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-300 transition hover:bg-gray-700 hover:text-white"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }

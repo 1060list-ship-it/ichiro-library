@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import PlaylistStreamRow from '@/components/PlaylistStreamRow'
 import type { Playlist, Stream, UserRole } from '@/lib/types'
+import { toggleBookmark } from '../../member/actions'
 
 type PlaylistDetail = Pick<Playlist, 'id' | 'title' | 'description'>
 type PlaylistPlayerStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'thumbnail_url' | 'view_count'>
@@ -16,10 +17,27 @@ type Props = {
 
 export default function PlaylistPlayer({ playlist, streams, role }: Props) {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(streams[0]?.video_id ?? null)
-  const [bookmarked, setBookmarked] = useState(false)
+  const [bookmarkedStreamMap, setBookmarkedStreamMap] = useState<Record<string, boolean>>({})
+  const [bookmarkPending, startBookmarkTransition] = useTransition()
 
   const activeStream = streams.find((stream) => stream.video_id === activeVideoId) ?? streams[0] ?? null
   const canBookmark = role === 'editor' || role === 'admin'
+  const isBookmarked = activeStream ? bookmarkedStreamMap[activeStream.id] ?? false : false
+
+  function handleBookmark() {
+    if (!activeStream) {
+      return
+    }
+
+    startBookmarkTransition(async () => {
+      const result = await toggleBookmark(activeStream.id)
+
+      setBookmarkedStreamMap((current) => ({
+        ...current,
+        [activeStream.id]: result.bookmarked,
+      }))
+    })
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -68,11 +86,12 @@ export default function PlaylistPlayer({ playlist, streams, role }: Props) {
                 {canBookmark && (
                   <button
                     type="button"
-                    onClick={() => setBookmarked((value) => !value)}
+                    disabled={bookmarkPending || !activeStream}
+                    onClick={handleBookmark}
                     className="text-xl text-yellow-400"
                     aria-label="ブックマーク"
                   >
-                    {bookmarked ? '★' : '☆'}
+                    {isBookmarked ? '★' : '☆'}
                   </button>
                 )}
               </div>

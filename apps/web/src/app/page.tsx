@@ -15,7 +15,21 @@ const CATEGORIES = [
 ]
 
 type View = 'top' | string
-type HomeStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'comment_count' | 'summary' | 'tags' | 'thumbnail_url'>
+type ActiveCardFilter = { kind: 'tag' | 'corner'; value: string }
+type HomeStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'comment_count' | 'summary' | 'tags' | 'corner_names' | 'thumbnail_url'>
+
+function matchesCardFilter(stream: Pick<Stream, 'tags' | 'corner_names'>, filter: ActiveCardFilter | null) {
+  if (!filter) return true
+  if (filter.kind === 'tag') return (stream.tags ?? []).includes(filter.value)
+  return (stream.corner_names ?? []).includes(filter.value)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyCardFilter(query: any, filter: ActiveCardFilter | null) {
+  if (!filter) return query
+  if (filter.kind === 'tag') return query.contains('tags', [filter.value])
+  return query.contains('corner_names', [filter.value])
+}
 
 function formatUpdatedAt(value: string) {
   return new Date(value).toLocaleDateString('ja-JP', {
@@ -66,6 +80,12 @@ function HomeContent() {
     const y = searchParams.get('year')
     return y ? parseInt(y, 10) : null
   })
+  const [activeFilter, setActiveFilter] = useState<ActiveCardFilter | null>(() => {
+    const tag = searchParams.get('tag')
+    if (tag) return { kind: 'tag', value: tag }
+    const corner = searchParams.get('corner')
+    return corner ? { kind: 'corner', value: corner } : null
+  })
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [streams, setStreams] = useState<HomeStream[]>([])
   const [resultCount, setResultCount] = useState<number>(0)
@@ -98,9 +118,11 @@ function HomeContent() {
     if (view !== 'top') params.set('view', view)
     if (fuzzy) params.set('fuzzy', '1')
     if (year !== null) params.set('year', String(year))
+    if (activeFilter?.kind === 'tag') params.set('tag', activeFilter.value)
+    if (activeFilter?.kind === 'corner') params.set('corner', activeFilter.value)
     const qs = params.toString()
     router.replace(qs ? `?${qs}` : '/', { scroll: false })
-  }, [query, view, fuzzy, year, router])
+  }, [query, view, fuzzy, year, activeFilter, router])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 400)
@@ -149,6 +171,7 @@ function HomeContent() {
             s.stream_date >= dateFrom! && s.stream_date < dateTo!
           )
         }
+        results = results.filter((stream) => matchesCardFilter(stream, activeFilter))
         const filtered = excludes.length > 0
           ? results.filter(s => excludes.every(ex =>
               !s.title?.toLowerCase().includes(ex.toLowerCase()) &&
@@ -164,7 +187,7 @@ function HomeContent() {
           const textConds = includes.flatMap(kw =>
             [`title.ilike.%${kw}%`, `summary.ilike.%${kw}%`]
           ).join(',')
-          let q = yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).or(textConds))
+          let q = applyCardFilter(yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).or(textConds)), activeFilter)
           for (const ex of excludes) {
             q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
           }
@@ -193,7 +216,7 @@ function HomeContent() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const streamIds = (seRes.data ?? []).map((r: any) => r.stream_id)
           if (streamIds.length > 0) {
-            let q = yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).in('id', streamIds))
+            let q = applyCardFilter(yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT).in('id', streamIds)), activeFilter)
             for (const ex of excludes) {
               q = q.not('title', 'ilike', `%${ex}%`).not('summary', 'ilike', `%${ex}%`)
             }
@@ -215,21 +238,21 @@ function HomeContent() {
       }
     } else if (debouncedQuery.trim()) {
       // 日付のみのクエリ（キーワードなし）— 該当月の配信一覧
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true }))
+      const countRes = await applyCardFilter(yd(supabase.from('streams').select('id', { count: 'exact', head: true })), activeFilter)
       count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
+      const res = await applyCardFilter(yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT)), activeFilter)
         .order('stream_date', { ascending: false }).limit(50)
       data = (res.data ?? []) as HomeStream[]
     } else if (view === 'top') {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true }))
+      const countRes = await applyCardFilter(yd(supabase.from('streams').select('id', { count: 'exact', head: true })), activeFilter)
       count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
+      const res = await applyCardFilter(yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT)), activeFilter)
         .order('stream_date', { ascending: false }).limit(year ? 20 : 10)
       data = res.data ?? []
     } else if (view === 'ranking-view') {
-      const countRes = await yd(supabase.from('streams').select('id', { count: 'exact', head: true }))
+      const countRes = await applyCardFilter(yd(supabase.from('streams').select('id', { count: 'exact', head: true })), activeFilter)
       count = countRes.count ?? 0
-      const res = await yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT))
+      const res = await applyCardFilter(yd(supabase.from('streams').select(PUBLIC_STREAM_CARD_SELECT)), activeFilter)
         .order('view_count', { ascending: false }).limit(20)
       data = res.data ?? []
     }
@@ -237,7 +260,7 @@ function HomeContent() {
     setStreams(data)
     setResultCount(count)
     setLoading(false)
-  }, [view, debouncedQuery, fuzzy, year])
+  }, [view, debouncedQuery, fuzzy, year, activeFilter])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -252,6 +275,34 @@ function HomeContent() {
   const currentCategory = CATEGORIES.find(c => c.key === view)
   const currentLabel = currentCategory?.label
   const showRank = view === 'ranking-view'
+  const activeFilterLabel = activeFilter
+    ? `${activeFilter.kind === 'tag' ? 'タグ' : 'コーナー'}: ${activeFilter.value}`
+    : null
+  const scopedLabels = [
+    activeFilter ? `${activeFilter.kind === 'tag' ? 'タグ' : 'コーナー'}「${activeFilter.value}」` : null,
+    parsedDisplay.label ?? (year ? `${year}年` : null),
+  ].filter(Boolean)
+  const scopedLabel = scopedLabels.join(' / ')
+  const sectionTitle = isSearching
+    ? textQueryDisplay
+      ? `「${textQueryDisplay}」の検索結果${scopedLabel ? ` (${scopedLabel})` : ''}`
+      : scopedLabel
+        ? `${scopedLabel}の配信`
+        : '検索結果'
+    : activeFilter
+      ? `${scopedLabel}${view === 'top' ? 'の配信' : `の${currentLabel}`}`
+      : view === 'top'
+        ? year ? `${year}年の配信` : '最近の配信'
+        : `${currentLabel}${year ? ` (${year}年)` : ''}`
+
+  const handleFilterSelect = useCallback((kind: 'tag' | 'corner', value: string) => {
+    setActiveFilter((current) => {
+      if (current?.kind === kind && current.value === value) {
+        return null
+      }
+      return { kind, value }
+    })
+  }, [])
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -317,6 +368,19 @@ function HomeContent() {
                 {y}年
               </button>
             ))}
+          </div>
+        )}
+
+        {activeFilterLabel && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-500">絞り込み：</span>
+            <button
+              type="button"
+              onClick={() => setActiveFilter(null)}
+              className="rounded-full border border-indigo-800 bg-indigo-950 px-2.5 py-1 text-xs text-indigo-200 transition hover:border-indigo-700 hover:bg-indigo-900"
+            >
+              {activeFilterLabel} ×
+            </button>
           </div>
         )}
 
@@ -386,13 +450,7 @@ function HomeContent() {
           )}
           <div>
             <h2 className="text-sm font-semibold text-gray-300">
-              {isSearching
-                ? textQueryDisplay
-                  ? `「${textQueryDisplay}」の検索結果${parsedDisplay.label ? ` (${parsedDisplay.label})` : year ? ` (${year}年)` : ''}`
-                  : `${parsedDisplay.label}の配信`
-                : view === 'top'
-                  ? year ? `${year}年の配信` : '最近の配信'
-                  : `${currentLabel}${year ? ` (${year}年)` : ''}`}
+              {sectionTitle}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">表示中 {streams.length.toLocaleString()}件 / 全{resultCount.toLocaleString()}件</p>
           </div>
@@ -407,7 +465,12 @@ function HomeContent() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {streams.map((s, i) => (
-              <StreamCard key={s.id} stream={s} rank={showRank ? i + 1 : undefined} />
+              <StreamCard
+                key={s.id}
+                stream={s}
+                rank={showRank ? i + 1 : undefined}
+                onFilterSelect={handleFilterSelect}
+              />
             ))}
           </div>
         )}
