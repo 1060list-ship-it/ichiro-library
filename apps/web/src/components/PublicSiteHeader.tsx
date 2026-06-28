@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 const NAV_ITEMS = [
   { href: '/', label: '配信一覧' },
@@ -19,6 +21,58 @@ function isActivePath(pathname: string, href: string) {
 
 export default function PublicSiteHeader() {
   const pathname = usePathname()
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    const syncUser = async () => {
+      const { data, error } = await supabase.auth.getUser()
+
+      if (!active) {
+        return
+      }
+
+      if (error) {
+        console.error('PublicSiteHeader getUser failed', error)
+        setIsAuthenticated(false)
+        return
+      }
+
+      setIsAuthenticated(Boolean(data.user))
+    }
+
+    void syncUser()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) {
+        return
+      }
+
+      setIsAuthenticated(Boolean(session?.user))
+    })
+
+    return () => {
+      active = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [pathname])
+
+  const handleLogout = async () => {
+    setIsSigningOut(true)
+
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      console.error('PublicSiteHeader signOut failed', error)
+      setIsSigningOut(false)
+      return
+    }
+
+    setIsAuthenticated(false)
+    window.location.assign('/')
+  }
 
   if (!pathname || HIDDEN_PATHS.has(pathname) || HIDDEN_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     return null
@@ -49,6 +103,36 @@ export default function PublicSiteHeader() {
               </Link>
             )
           })}
+
+          {isAuthenticated === false && (
+            <Link
+              href="/login"
+              className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+            >
+              ログイン
+            </Link>
+          )}
+
+          {isAuthenticated === true && (
+            <>
+              <Link
+                href="/member"
+                className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                マイページ
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleLogout()
+                }}
+                disabled={isSigningOut}
+                className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ログアウト
+              </button>
+            </>
+          )}
         </nav>
       </div>
     </header>

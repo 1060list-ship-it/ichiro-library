@@ -159,11 +159,23 @@ function StreamRow({
   )
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+function StatCard({ label, value, href }: { label: string; value: number; href?: string }) {
+  const inner = (
+    <>
       <p className="text-xs text-gray-500">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-white">{value.toLocaleString()}</p>
+    </>
+  )
+  if (href && value > 0) {
+    return (
+      <a href={href} className="block rounded-lg border border-gray-700 bg-gray-900 p-4 transition hover:border-gray-500">
+        {inner}
+      </a>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+      {inner}
     </div>
   )
 }
@@ -506,7 +518,7 @@ export default function AdminPageClient({ logoutAction }: { logoutAction: () => 
             <section className="grid grid-cols-3 gap-4">
               <StatCard label="登録動画数" value={dashboard.summary.totalCount} />
               <StatCard label="未レビュー数" value={dashboard.summary.unreviewedCount} />
-              <StatCard label="字幕取得失敗数" value={dashboard.summary.transcriptFailedCount} />
+              <StatCard label="字幕取得失敗数" value={dashboard.summary.transcriptFailedCount} href="#failed-streams" />
             </section>
 
             <section className="rounded-xl border border-gray-800 bg-gray-900">
@@ -764,7 +776,7 @@ export default function AdminPageClient({ logoutAction }: { logoutAction: () => 
               )}
             </section>
 
-            <section className="rounded-xl border border-gray-800 bg-gray-900">
+            <section id="failed-streams" className="rounded-xl border border-gray-800 bg-gray-900">
               <div className="border-b border-gray-800 px-5 py-4">
                 <h2 className="text-base font-semibold">字幕取得失敗動画</h2>
                 <p className="mt-1 text-sm text-gray-400">字幕を取得できず、自動処理が止まった配信一覧</p>
