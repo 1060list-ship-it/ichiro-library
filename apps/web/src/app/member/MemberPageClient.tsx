@@ -454,13 +454,6 @@ export default function MemberPageClient({
   }, [initialRequests])
 
   useEffect(() => {
-    if (!expandedPlaylistId && playlists[0]) {
-      startTransition(() => {
-        setExpandedPlaylistId(playlists[0].id)
-      })
-      return
-    }
-
     if (expandedPlaylistId && !playlists.some((playlist) => playlist.id === expandedPlaylistId)) {
       startTransition(() => {
         setExpandedPlaylistId(playlists[0]?.id ?? null)
@@ -1415,6 +1408,7 @@ export default function MemberPageClient({
                                     ))
                                   ) : (
                                     <DndContext
+                                      id={`playlist-dnd-${playlist.id}`}
                                       sensors={sensors}
                                       collisionDetection={closestCenter}
                                       onDragEnd={(event) => void handleDragEnd(event)}

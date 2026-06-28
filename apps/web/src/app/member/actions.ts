@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import type { Database, EntityWordRequest, Playlist, PlaylistStream, Stream } from '@/lib/types'
 
 const PLAYLIST_SELECT = [
@@ -448,22 +449,12 @@ export async function reorderPlaylistStream(
 
   await assertPlaylistLock(normalizedPlaylistId, updatedAt)
 
-  const rpcResult = await (
-    supabaseAdmin as typeof supabaseAdmin & {
-      rpc: (
-        fn: 'reorder_playlist_stream',
-        args: {
-          p_playlist_id: string
-          p_stream_id: string
-          p_new_position: number
-        },
-      ) => Promise<{ data: unknown; error: PostgrestErrorLike | null }>
-    }
-  ).rpc('reorder_playlist_stream', {
+  const supabaseUser = await createSupabaseServerClient()
+  const rpcResult = await supabaseUser.rpc('reorder_playlist_stream' as never, {
     p_playlist_id: normalizedPlaylistId,
     p_stream_id: normalizedStreamId,
     p_new_position: newPosition,
-  })
+  } as never) as { data: unknown; error: PostgrestErrorLike | null }
 
   if (rpcResult.error) {
     if (isUniqueViolation(rpcResult.error)) {
