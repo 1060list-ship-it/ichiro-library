@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Entity, EntityWordRequest, Playlist, PlaylistStream, Stream, UserRole } from '@/lib/types'
 import {
@@ -68,6 +68,7 @@ type Props = {
 }
 
 const DEFAULT_SAVE_MESSAGE = '保存済み'
+let optimisticItemCounter = 0
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ja-JP', {
@@ -105,6 +106,11 @@ function buildSaveStateMap(playlists: MemberPlaylist[]) {
       itemId: null,
     } satisfies SaveState,
   ])))
+}
+
+function nextOptimisticPlaylistItemId(streamId: string) {
+  optimisticItemCounter += 1
+  return `temp-${streamId}-${optimisticItemCounter}`
 }
 
 function getDefaultSaveState(): SaveState {
@@ -422,33 +428,43 @@ export default function MemberPageClient({
   const [reviewPendingId, setReviewPendingId] = useState<string | null>(null)
 
   useEffect(() => {
-    setPlaylists(toEditablePlaylists(initialPlaylists))
-    setPlaylistStates(buildSaveStateMap(initialPlaylists))
+    startTransition(() => {
+      setPlaylists(toEditablePlaylists(initialPlaylists))
+      setPlaylistStates(buildSaveStateMap(initialPlaylists))
+    })
   }, [initialPlaylists])
 
   useEffect(() => {
-    setEntities(initialEntities)
-    setEntityId((current) => {
-      if (current && initialEntities.some((entity) => entity.id === current)) {
-        return current
-      }
+    startTransition(() => {
+      setEntities(initialEntities)
+      setEntityId((current) => {
+        if (current && initialEntities.some((entity) => entity.id === current)) {
+          return current
+        }
 
-      return initialEntities[0]?.id ?? ''
+        return initialEntities[0]?.id ?? ''
+      })
     })
   }, [initialEntities])
 
   useEffect(() => {
-    setRequests(initialRequests)
+    startTransition(() => {
+      setRequests(initialRequests)
+    })
   }, [initialRequests])
 
   useEffect(() => {
     if (!expandedPlaylistId && playlists[0]) {
-      setExpandedPlaylistId(playlists[0].id)
+      startTransition(() => {
+        setExpandedPlaylistId(playlists[0].id)
+      })
       return
     }
 
     if (expandedPlaylistId && !playlists.some((playlist) => playlist.id === expandedPlaylistId)) {
-      setExpandedPlaylistId(playlists[0]?.id ?? null)
+      startTransition(() => {
+        setExpandedPlaylistId(playlists[0]?.id ?? null)
+      })
     }
   }, [expandedPlaylistId, playlists])
 
@@ -475,9 +491,11 @@ export default function MemberPageClient({
 
   useEffect(() => {
     if (!currentPlaylist) {
-      setSearchResults([])
-      setSearchError('')
-      setSearchPending(false)
+      startTransition(() => {
+        setSearchResults([])
+        setSearchError('')
+        setSearchPending(false)
+      })
       return
     }
 
@@ -485,14 +503,18 @@ export default function MemberPageClient({
     const normalizedQuery = searchQuery.trim()
 
     if (!normalizedQuery && !bookmarkedOnly) {
-      setSearchResults([])
-      setSearchError('')
-      setSearchPending(false)
+      startTransition(() => {
+        setSearchResults([])
+        setSearchError('')
+        setSearchPending(false)
+      })
       return
     }
 
-    setSearchPending(true)
-    setSearchError('')
+    startTransition(() => {
+      setSearchPending(true)
+      setSearchError('')
+    })
 
     const timer = window.setTimeout(async () => {
       try {
@@ -777,7 +799,7 @@ export default function MemberPageClient({
 
     const previousItems = playlist.items
     const optimisticItem: MemberPlaylistItem = {
-      id: `temp-${stream.id}-${Date.now()}`,
+      id: nextOptimisticPlaylistItemId(stream.id),
       playlist_id: playlistId,
       stream_id: stream.id,
       position: toPositionString(computeTargetPosition(previousItems, '__new__', previousItems.length)),

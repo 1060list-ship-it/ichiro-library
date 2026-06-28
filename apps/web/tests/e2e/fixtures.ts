@@ -197,17 +197,17 @@ export async function browserFetchJson(
 }
 
 export const test = base.extend<E2EFixtures>({
-  editorUser: async ({}, use) => {
-    await use(loadTestConfig().editorUser)
+  editorUser: async ({}, applyFixture) => {
+    await applyFixture(loadTestConfig().editorUser)
   },
-  adminUser: async ({}, use) => {
-    await use(loadTestConfig().adminUser)
+  adminUser: async ({}, applyFixture) => {
+    await applyFixture(loadTestConfig().adminUser)
   },
-  supabaseAnon: async ({}, use) => {
-    await use(loadTestConfig().supabaseAnon)
+  supabaseAnon: async ({}, applyFixture) => {
+    await applyFixture(loadTestConfig().supabaseAnon)
   },
-  loginAs: async ({ page, editorUser, adminUser }, use) => {
-    await use(async (role, returnTo = '/member') => {
+  loginAs: async ({ page, editorUser, adminUser }, applyFixture) => {
+    await applyFixture(async (role, returnTo = '/member') => {
       const credentials = role === 'admin' ? adminUser : editorUser
 
       if (!credentials) {

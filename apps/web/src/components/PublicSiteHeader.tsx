@@ -103,11 +103,13 @@ export default function PublicSiteHeader() {
               </Link>
             )
           })}
+        </nav>
 
+        <div className="flex items-center gap-3">
           {isAuthenticated === false && (
             <Link
               href="/login"
-              className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+              className="text-xs text-gray-500 transition-colors hover:text-gray-300"
             >
               ログイン
             </Link>
@@ -117,23 +119,21 @@ export default function PublicSiteHeader() {
             <>
               <Link
                 href="/member"
-                className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+                className="rounded border border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
               >
-                マイページ
+                管理
               </Link>
               <button
                 type="button"
-                onClick={() => {
-                  void handleLogout()
-                }}
+                onClick={() => { void handleLogout() }}
                 disabled={isSigningOut}
-                className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="text-xs text-gray-600 transition-colors hover:text-gray-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ログアウト
               </button>
             </>
           )}
-        </nav>
+        </div>
       </div>
     </header>
   )
