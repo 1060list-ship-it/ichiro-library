@@ -194,9 +194,9 @@ export default function StreamPage() {
                 type="button"
                 onClick={() => void handleReport()}
                 disabled={reported || reporting}
-                className="text-xs text-rose-300 transition hover:text-rose-200 disabled:text-gray-600 disabled:cursor-default"
+                className="text-xs text-gray-500 transition hover:text-gray-300 disabled:text-gray-600 disabled:cursor-default"
               >
-                {reported ? '報告済み' : reporting ? '送信中...' : '報告する'}
+                {reported ? '依頼済み' : reporting ? '送信中...' : '修正を依頼する'}
               </button>
             </div>
           </div>
