@@ -1163,3 +1163,13 @@ export async function fetchAdminBookmarks() {
     return stream ? [stream] : []
   })
 }
+
+export async function removeAdminBookmark(streamId: string) {
+  const { user } = await requireRole(['admin'])
+  const { error } = await supabaseAdmin
+    .from('bookmarks')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('stream_id', streamId)
+  if (error) throw new Error(`bookmark remove failed: ${error.message}`)
+}

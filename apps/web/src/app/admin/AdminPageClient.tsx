@@ -12,6 +12,7 @@ import {
   fetchAdminStreamsPage,
   fetchAdminBookmarks,
   fetchRecentJobs,
+  removeAdminBookmark,
   searchAdminStreams,
   setAdminStreamReviewed,
 } from './actions'
@@ -369,6 +370,15 @@ export default function AdminPageClient({
       setBookmarksLoading(false)
     }
   }, [])
+
+  const handleRemoveBookmark = useCallback(async (streamId: string) => {
+    setBookmarks((prev) => prev.filter((s) => s.id !== streamId))
+    try {
+      await removeAdminBookmark(streamId)
+    } catch {
+      void loadBookmarks()
+    }
+  }, [loadBookmarks])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -746,12 +756,21 @@ export default function AdminPageClient({
                           {new Date(stream.stream_date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </p>
                       </div>
-                      <Link
-                        href={`/stream/${stream.video_id}`}
-                        className="flex-shrink-0 text-sm text-gray-400 underline decoration-gray-700 underline-offset-4 hover:text-white"
-                      >
-                        ページを見る
-                      </Link>
+                      <div className="flex flex-shrink-0 items-center gap-3">
+                        <Link
+                          href={`/stream/${stream.video_id}`}
+                          className="text-sm text-gray-400 underline decoration-gray-700 underline-offset-4 hover:text-white"
+                        >
+                          ページを見る
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => { void handleRemoveBookmark(stream.id) }}
+                          className="text-xs text-gray-600 transition hover:text-red-400"
+                        >
+                          解除
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
