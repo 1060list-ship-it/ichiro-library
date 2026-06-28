@@ -11,6 +11,9 @@ export default async function AdminPage() {
     if (error instanceof Error && error.message === 'Unauthorized') {
       redirect('/login?return=/admin')
     }
+    if (error instanceof Error && error.message === 'Forbidden') {
+      redirect('/member')
+    }
     throw error
   }
 

@@ -22,6 +22,7 @@ function isActivePath(pathname: string, href: string) {
 export default function PublicSiteHeader() {
   const pathname = usePathname()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   useEffect(() => {
@@ -37,10 +38,23 @@ export default function PublicSiteHeader() {
       if (error) {
         console.error('PublicSiteHeader getUser failed', error)
         setIsAuthenticated(false)
+        setIsAdmin(false)
         return
       }
 
-      setIsAuthenticated(Boolean(data.user))
+      const authenticated = Boolean(data.user)
+      setIsAuthenticated(authenticated)
+
+      if (authenticated) {
+        fetch('/api/role')
+          .then((res) => res.json())
+          .then((json: { role: string | null }) => {
+            if (active) setIsAdmin(json.role === 'admin')
+          })
+          .catch(() => undefined)
+      } else {
+        setIsAdmin(false)
+      }
     }
 
     void syncUser()
@@ -51,6 +65,7 @@ export default function PublicSiteHeader() {
       }
 
       setIsAuthenticated(Boolean(session?.user))
+      if (!session?.user) setIsAdmin(false)
     })
 
     return () => {
@@ -117,12 +132,14 @@ export default function PublicSiteHeader() {
 
           {isAuthenticated === true && (
             <>
-              <Link
-                href="/admin"
-                className="rounded border border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
-              >
-                管理
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="rounded border border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
+                >
+                  管理
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => { void handleLogout() }}
