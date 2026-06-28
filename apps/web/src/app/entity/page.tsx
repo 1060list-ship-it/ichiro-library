@@ -33,7 +33,7 @@ export default async function EntityHubPage() {
     throw error
   }
 
-  const entities = (data ?? []) as EntityIndexItem[]
+  const entities = (data ?? []) as unknown as EntityIndexItem[]
   const grouped = entities.reduce<Record<string, EntityIndexItem[]>>((acc, entity) => {
     const key = entity.category
     acc[key] = acc[key] ?? []

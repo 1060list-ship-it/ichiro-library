@@ -28,6 +28,7 @@ export type Stream = {
   thumbnail_url: string | null
   status: string
   is_reviewed: boolean
+  needs_manual_review: boolean | null
   avg_rating: number
   rating_count: number
   created_at: string
@@ -147,31 +148,35 @@ export type EngagementRankingArgs = {
 export type Database = {
   public: {
     Tables: {
-      streams: { Row: Stream; Insert: Omit<Stream, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Stream> }
-      chapters: { Row: Chapter; Insert: Omit<Chapter, 'id' | 'created_at'>; Update: Partial<Chapter> }
-      ratings: { Row: Rating; Insert: Omit<Rating, 'id' | 'created_at'>; Update: Partial<Rating> }
-      entities: { Row: Entity; Insert: Omit<Entity, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Entity> }
-      stream_entities: { Row: StreamEntity; Insert: StreamEntity; Update: Partial<StreamEntity> }
-      magazine_entities: { Row: MagazineEntity; Insert: MagazineEntity; Update: Partial<MagazineEntity> }
+      streams: { Row: Stream; Insert: Omit<Stream, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Stream>; Relationships: [] }
+      chapters: { Row: Chapter; Insert: Omit<Chapter, 'id' | 'created_at'>; Update: Partial<Chapter>; Relationships: [] }
+      ratings: { Row: Rating; Insert: Omit<Rating, 'id' | 'created_at'>; Update: Partial<Rating>; Relationships: [] }
+      entities: { Row: Entity; Insert: Omit<Entity, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Entity>; Relationships: [] }
+      stream_entities: { Row: StreamEntity; Insert: StreamEntity; Update: Partial<StreamEntity>; Relationships: [] }
+      magazine_entities: { Row: MagazineEntity; Insert: MagazineEntity; Update: Partial<MagazineEntity>; Relationships: [] }
       user_roles: {
         Row: { user_id: string; role: UserRole; granted_by: string | null; granted_at: string | null }
         Insert: { user_id: string; role: UserRole; granted_by?: string | null; granted_at?: string | null }
         Update: { user_id?: string; role?: UserRole; granted_by?: string | null; granted_at?: string | null }
+        Relationships: []
       }
       playlists: {
         Row: Playlist
         Insert: Omit<Playlist, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string | null; updated_at?: string | null }
         Update: Partial<Playlist>
+        Relationships: []
       }
       playlist_streams: {
         Row: PlaylistStream
         Insert: Omit<PlaylistStream, 'id' | 'added_at'> & { id?: string; added_at?: string | null }
         Update: Partial<PlaylistStream>
+        Relationships: []
       }
       bookmarks: {
         Row: Bookmark
         Insert: Omit<Bookmark, 'created_at'> & { created_at?: string | null }
         Update: Partial<Bookmark>
+        Relationships: []
       }
       entity_word_requests: {
         Row: EntityWordRequest
@@ -182,13 +187,16 @@ export type Database = {
           reviewed_at?: string | null
         }
         Update: Partial<EntityWordRequest>
+        Relationships: []
       }
       search_logs: {
         Row: SearchLog
         Insert: Omit<SearchLog, 'id' | 'searched_at'> & { id?: string; searched_at?: string | null }
         Update: Partial<SearchLog>
+        Relationships: []
       }
     }
+    Views: Record<string, never>
     Functions: {
       get_engagement_ranking: {
         Args: EngagementRankingArgs

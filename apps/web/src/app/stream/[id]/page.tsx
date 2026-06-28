@@ -91,7 +91,7 @@ export default function StreamPage() {
             .select(PUBLIC_ENTITY_LINK_SELECT)
             .in('id', entityIds)
 
-          if (entityData) setEntities(entityData as LinkableEntity[])
+          if (entityData) setEntities(entityData as unknown as LinkableEntity[])
         }
 
         const { data: c } = await supabase
@@ -99,7 +99,7 @@ export default function StreamPage() {
           .select(PUBLIC_CHAPTER_LIST_SELECT)
           .eq('stream_id', s.id)
           .order('sort_order')
-        if (c) setChapters(c as ChapterListItem[])
+        if (c) setChapters(c as unknown as ChapterListItem[])
       }
       setLoading(false)
     }

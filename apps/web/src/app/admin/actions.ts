@@ -18,7 +18,7 @@ export type AdminDashboardData = {
 }
 
 export type AdminListStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'status' | 'thumbnail_url' | 'is_reviewed'> & {
-  needs_manual_review: boolean
+  needs_manual_review: boolean | null
 }
 
 export type AdminEditableStream = Pick<
@@ -285,7 +285,7 @@ export async function fetchSearchLogStats(): Promise<SearchLogStats> {
         throw error
       }
 
-      return (data ?? []) as SearchLogQueryRow[]
+      return (data ?? []) as unknown as SearchLogQueryRow[]
     }),
     fetchAllSearchLogPages<SearchLogDateRow>(async (offset, limit) => {
       const { data, error } = await supabaseAdmin
@@ -299,12 +299,13 @@ export async function fetchSearchLogStats(): Promise<SearchLogStats> {
         throw error
       }
 
-      return (data ?? []) as SearchLogDateRow[]
+      return (data ?? []) as unknown as SearchLogDateRow[]
     }),
   ])
 
   const queryCounts = new Map<string, number>()
   for (const row of topQueryRows) {
+    if (!row.query) continue
     const nextCount = (queryCounts.get(row.query) ?? 0) + 1
     queryCounts.set(row.query, nextCount)
   }
@@ -448,7 +449,7 @@ export async function fetchRecentJobs(limit = 10): Promise<PipelineJob[]> {
     throw error
   }
 
-  return (data ?? []) as PipelineJob[]
+  return (data ?? []) as unknown as PipelineJob[]
 }
 
 export async function cancelPipelineJob(jobId: string): Promise<void> {
@@ -530,7 +531,7 @@ export async function fetchAdminStream(videoId: string): Promise<AdminEditableSt
 
   if (!withLiveViewing.error) {
     return withLiveViewing.data
-      ? toEditableStream({ ...(withLiveViewing.data as AdminEditableStream), supportsLiveViewing: true })
+      ? toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
       : null
   }
 
@@ -570,7 +571,7 @@ export async function fetchAdminChapters(videoId: string): Promise<AdminChapter[
     throw error
   }
 
-  return (data ?? []) as AdminChapter[]
+  return (data ?? []) as unknown as AdminChapter[]
 }
 
 export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<AdminEditableStream> {
@@ -599,7 +600,7 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
   let data: AdminEditableStream
 
   if (!withLiveViewing.error) {
-    data = toEditableStream({ ...(withLiveViewing.data as AdminEditableStream), supportsLiveViewing: true })
+    data = toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
   } else if (isMissingLiveViewingColumn(withLiveViewing.error)) {
     const fallbackUpdates = { ...updates }
     delete fallbackUpdates.has_live_viewing
@@ -783,7 +784,7 @@ export async function fetchAdminEntities(): Promise<AdminEntity[]> {
     .order('category', { ascending: true })
     .order('sort_order', { ascending: true })
   if (error) throw error
-  return (data ?? []) as AdminEntity[]
+  return (data ?? []) as unknown as AdminEntity[]
 }
 
 export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> {
@@ -794,7 +795,7 @@ export async function fetchAdminEntity(id: string): Promise<AdminEntity | null> 
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
-  return data as AdminEntity | null
+  return data as unknown as AdminEntity | null
 }
 
 export async function fetchAdminEntityStreams(entityId: string): Promise<AdminEntityStream[]> {
@@ -813,7 +814,7 @@ export async function fetchAdminEntityStreams(entityId: string): Promise<AdminEn
     .in('id', ids)
     .order('stream_date', { ascending: false })
   if (error) throw error
-  return (data ?? []) as AdminEntityStream[]
+  return (data ?? []) as unknown as AdminEntityStream[]
 }
 
 export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<AdminEntity> {
@@ -847,7 +848,7 @@ export async function upsertAdminEntity(input: UpsertAdminEntityInput): Promise<
   if (result.error) throw result.error
   revalidatePath('/admin/entity')
   revalidatePath('/entity')
-  return result.data as AdminEntity
+  return result.data as unknown as AdminEntity
 }
 
 export async function deleteAdminEntity(id: string): Promise<void> {
@@ -943,7 +944,7 @@ export async function markStreamReviewed(videoId: string): Promise<AdminEditable
   let data: AdminEditableStream
 
   if (!withLiveViewing.error) {
-    data = toEditableStream({ ...(withLiveViewing.data as AdminEditableStream), supportsLiveViewing: true })
+    data = toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
   } else if (isMissingLiveViewingColumn(withLiveViewing.error)) {
     const fallback = await supabaseAdmin
       .from('streams')
@@ -1135,4 +1136,30 @@ export async function scrutinizeStreamSummary(videoId: string): Promise<Scrutiny
   return { entities }
 }
 
-export { fetchBookmarkedStreams } from '../member/actions'
+type AdminBookmarkRow = {
+  streams: {
+    id: string
+    video_id: string
+    title: string
+    stream_date: string
+  } | { id: string; video_id: string; title: string; stream_date: string }[] | null
+}
+
+export async function fetchAdminBookmarks() {
+  const { user } = await requireRole(['admin'])
+
+  const { data, error } = await supabaseAdmin
+    .from('bookmarks')
+    .select('streams(id, video_id, title, stream_date)')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`admin bookmarks fetch failed: ${error.message}`)
+  }
+
+  return ((data ?? []) as unknown as AdminBookmarkRow[]).flatMap((row) => {
+    const stream = Array.isArray(row.streams) ? row.streams[0] : row.streams
+    return stream ? [stream] : []
+  })
+}

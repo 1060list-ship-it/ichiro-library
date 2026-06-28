@@ -61,13 +61,13 @@ export default async function PlaylistDetailPage({ params }: PageProps) {
     throw new Error(`playlist streams fetch failed: ${streamRowsError.message}`)
   }
 
-  const streams = ((streamRows ?? []) as PlaylistStreamJoinRow[])
+  const streams = ((streamRows ?? []) as unknown as PlaylistStreamJoinRow[])
     .map((row) => takeFirstRelation(row.streams))
     .filter((stream): stream is PlaylistPlayerStream => stream !== null)
 
   return (
     <PlaylistPlayer
-      playlist={playlist as PlaylistDetail}
+      playlist={playlist as unknown as PlaylistDetail}
       streams={streams}
       role={role}
     />

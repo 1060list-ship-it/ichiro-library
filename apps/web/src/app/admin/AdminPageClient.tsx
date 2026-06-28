@@ -10,13 +10,13 @@ import {
   enqueueJob,
   fetchAdminDashboard,
   fetchAdminStreamsPage,
-  fetchBookmarkedStreams,
+  fetchAdminBookmarks,
   fetchRecentJobs,
   searchAdminStreams,
   setAdminStreamReviewed,
 } from './actions'
 
-type AdminBookmarkedStream = Awaited<ReturnType<typeof fetchBookmarkedStreams>>[number]
+type AdminBookmarkedStream = Awaited<ReturnType<typeof fetchAdminBookmarks>>[number]
 
 const UNREVIEWED_INITIAL_LIMIT = 5
 
@@ -360,7 +360,7 @@ export default function AdminPageClient({
 
   const loadBookmarks = useCallback(async () => {
     try {
-      const data = await fetchBookmarkedStreams()
+      const data = await fetchAdminBookmarks()
       setBookmarks(data)
       setBookmarksError('')
     } catch {

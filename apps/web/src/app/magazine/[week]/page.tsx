@@ -345,7 +345,7 @@ export default function MagazineWeekPage() {
               'エンティティ情報の取得がタイムアウトしました'
             )
 
-            if (!cancelled && entityData) setEntities(entityData as LinkableEntity[])
+            if (!cancelled && entityData) setEntities(entityData as unknown as LinkableEntity[])
           }
 
           // stream_ids から動画情報を取得して video_id ベースのマップを構築
@@ -360,7 +360,7 @@ export default function MagazineWeekPage() {
 
             if (!cancelled && streams) {
               const map: Record<string, StreamInfo> = {}
-              for (const s of streams as { video_id: string; title: string; stream_date: string }[]) {
+              for (const s of streams as unknown as { video_id: string; title: string; stream_date: string }[]) {
                 map[s.video_id] = { title: s.title, stream_date: s.stream_date }
               }
               setStreamMap(map)

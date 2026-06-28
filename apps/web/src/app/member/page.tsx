@@ -83,7 +83,7 @@ export default async function MemberPage() {
     throw new Error(`member playlists fetch failed: ${playlistsError.message}`)
   }
 
-  const playlistRows = (playlists ?? []) as PlaylistListItem[]
+  const playlistRows = (playlists ?? []) as unknown as PlaylistListItem[]
   const playlistIds = playlistRows.map((playlist) => playlist.id)
   const playlistItemsById = new Map<string, MemberPlaylistItem[]>()
 
@@ -99,7 +99,7 @@ export default async function MemberPage() {
       throw new Error(`member playlist streams fetch failed: ${playlistStreamError.message}`)
     }
 
-    for (const row of (playlistStreamRows ?? []) as PlaylistStreamJoinRow[]) {
+    for (const row of (playlistStreamRows ?? []) as unknown as PlaylistStreamJoinRow[]) {
       const stream = takeFirstRelation(row.streams)
 
       if (!stream) {
@@ -149,8 +149,8 @@ export default async function MemberPage() {
     throw new Error(`member entity requests fetch failed: ${requestResult.error.message}`)
   }
 
-  const initialEntities = (entities ?? []) as MemberEntity[]
-  const initialRequests = (requestResult.data ?? []) as MemberEntityRequest[]
+  const initialEntities = (entities ?? []) as unknown as MemberEntity[]
+  const initialRequests = (requestResult.data ?? []) as unknown as MemberEntityRequest[]
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">

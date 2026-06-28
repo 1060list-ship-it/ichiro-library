@@ -135,7 +135,7 @@ async function fetchPlaylistTimestamp(playlistId: string) {
     throw new Error(`playlists lookup failed: ${error.message}`)
   }
 
-  return data as PlaylistTimestampRow | null
+  return data as unknown as PlaylistTimestampRow | null
 }
 
 async function assertPlaylistLock(playlistId: string, updatedAt?: string) {
@@ -168,7 +168,7 @@ async function touchPlaylist(playlistId: string, userId: string) {
     throw new Error(`playlists touch failed: ${error.message}`)
   }
 
-  const row = data as PlaylistTouchRow | null
+  const row = data as unknown as PlaylistTouchRow | null
 
   if (!row) {
     throw new Error('プレイリストが見つからない')
@@ -256,8 +256,8 @@ export async function createPlaylist(title: string, description?: string) {
     throw new Error(`playlists insert failed: ${error.message}`)
   }
 
-  revalidatePlaylistPaths((data as Playlist).id)
-  return data as Playlist
+  revalidatePlaylistPaths((data as unknown as Playlist).id)
+  return data as unknown as Playlist
 }
 
 export async function updatePlaylist(
@@ -297,7 +297,7 @@ export async function updatePlaylist(
   }
 
   revalidatePlaylistPaths(normalizedPlaylistId)
-  return result.data as Playlist
+  return result.data as unknown as Playlist
 }
 
 export async function deletePlaylist(playlistId: string, updatedAt?: string) {
@@ -348,7 +348,7 @@ export async function addStreamToPlaylist(playlistId: string, videoId: string, u
     throw new Error(`streams lookup failed: ${streamResult.error.message}`)
   }
 
-  const stream = streamResult.data as StreamIdRow | null
+  const stream = streamResult.data as unknown as StreamIdRow | null
 
   if (!stream) {
     throw new Error('配信が見つからない')
@@ -366,7 +366,7 @@ export async function addStreamToPlaylist(playlistId: string, videoId: string, u
     throw new Error(`playlist_streams lookup failed: ${maxPositionResult.error.message}`)
   }
 
-  const maxPositionRow = maxPositionResult.data as StreamPositionRow | null
+  const maxPositionRow = maxPositionResult.data as unknown as StreamPositionRow | null
   const basePosition = maxPositionRow?.position ? Number(maxPositionRow.position) : 0
   const nextPosition = (basePosition + 10000).toFixed(8)
 
@@ -395,7 +395,7 @@ export async function addStreamToPlaylist(playlistId: string, videoId: string, u
   revalidatePlaylistPaths(normalizedPlaylistId)
 
   return {
-    playlistStream: insertResult.data as PlaylistStream,
+    playlistStream: insertResult.data as unknown as PlaylistStream,
     updatedAt: nextUpdatedAt,
   }
 }
@@ -534,7 +534,7 @@ export async function fetchBookmarkedStreams(filters?: {
       throw new Error(`bookmarked streams fetch failed: ${result.error.message}`)
     }
 
-    return ((result.data ?? []) as BookmarkedStreamRow[]).map(stripBookmarkRelation)
+    return ((result.data ?? []) as unknown as BookmarkedStreamRow[]).map(stripBookmarkRelation)
   }
 
   const pattern = `%${queryText}%`
@@ -553,7 +553,7 @@ export async function fetchBookmarkedStreams(filters?: {
 
   const merged = new Map<string, MemberBookmarkedStream>()
 
-  for (const row of [...(titleResult.data ?? []), ...(summaryResult.data ?? [])] as BookmarkedStreamRow[]) {
+  for (const row of [...(titleResult.data ?? []), ...(summaryResult.data ?? [])] as unknown as BookmarkedStreamRow[]) {
     merged.set(row.id, stripBookmarkRelation(row))
   }
 
@@ -584,7 +584,7 @@ export async function submitEntityWordRequest(entityId: string, word: string) {
     throw new Error(`entity_word_requests insert failed: ${result.error.message}`)
   }
 
-  const request = result.data as EntityWordRequest
+  const request = result.data as unknown as EntityWordRequest
   revalidateEntityRequestPaths(request.entity_id)
   return request
 }
@@ -612,7 +612,7 @@ export async function approveEntityWordRequest(requestId: string) {
     throw new Error(`entity_word_requests approve failed: ${approveResult.error.message}`)
   }
 
-  const approvedRequest = approveResult.data as EntityWordRequest | null
+  const approvedRequest = approveResult.data as unknown as EntityWordRequest | null
 
   if (!approvedRequest) {
     throw new Error('既に処理済み')
@@ -628,7 +628,7 @@ export async function approveEntityWordRequest(requestId: string) {
     throw new Error(`entities lookup failed: ${entityResult.error.message}`)
   }
 
-  const entity = entityResult.data as EntityMatchNamesRow | null
+  const entity = entityResult.data as unknown as EntityMatchNamesRow | null
 
   if (!entity) {
     throw new Error('エンティティが見つからない')
@@ -671,7 +671,7 @@ export async function rejectEntityWordRequest(requestId: string) {
     throw new Error(`entity_word_requests reject failed: ${result.error.message}`)
   }
 
-  const rejectedRequest = result.data as EntityWordRequest | null
+  const rejectedRequest = result.data as unknown as EntityWordRequest | null
 
   if (!rejectedRequest) {
     throw new Error('既に処理済み')

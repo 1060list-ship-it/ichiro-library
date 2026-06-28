@@ -27,7 +27,7 @@ export default async function PlaylistsPage() {
     throw new Error(`playlists fetch failed: ${playlistsError.message}`)
   }
 
-  const playlistRows = (playlists ?? []) as PlaylistListItem[]
+  const playlistRows = (playlists ?? []) as unknown as PlaylistListItem[]
 
   let playlistCards: PlaylistCardData[] = []
 
@@ -43,7 +43,7 @@ export default async function PlaylistsPage() {
 
     const countByPlaylist = new Map<string, number>()
 
-    for (const row of (streamRows ?? []) as PlaylistStreamCountRow[]) {
+    for (const row of (streamRows ?? []) as unknown as PlaylistStreamCountRow[]) {
       countByPlaylist.set(row.playlist_id, (countByPlaylist.get(row.playlist_id) ?? 0) + 1)
     }
 

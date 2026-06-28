@@ -542,7 +542,7 @@ export default function MemberPageClient({
             throw error
           }
 
-          nextResults = (data ?? []) as MemberStream[]
+          nextResults = (data ?? []) as unknown as MemberStream[]
         }
 
         if (!active) {

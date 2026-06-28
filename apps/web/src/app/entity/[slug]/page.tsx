@@ -59,7 +59,7 @@ export default async function EntityDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const entity = data as EntityDetail
+  const entity = data as unknown as EntityDetail
   const relatedStreams = await fetchRelatedStreams(entity.id)
 
   return (
