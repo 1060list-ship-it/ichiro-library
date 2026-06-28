@@ -1334,7 +1334,7 @@ export default function MemberPageClient({
                                         : '検索すると候補がここに並ぶ。'}
                                     </div>
                                   ) : (
-                                    <div className="space-y-3">
+                                    <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
                                       {searchResults.map((stream) => {
                                         const alreadyAdded = playlist.items.some((item) => item.stream_id === stream.id)
                                         return (
@@ -1400,7 +1400,7 @@ export default function MemberPageClient({
                                   </div>
                                 </div>
 
-                                <div className="mt-4 space-y-3">
+                                <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                                   {playlist.items.length === 0 ? (
                                     <div className="rounded-2xl border border-dashed border-gray-800 bg-gray-950/60 px-4 py-8 text-sm text-gray-500">
                                       まだ空だ。右側の候補から一本足して流れを作る。
