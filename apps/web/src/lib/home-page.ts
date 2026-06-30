@@ -13,7 +13,7 @@ export type ActiveCardFilter = {
   value: string
 }
 
-export type HomeStream = Pick<
+type HomeStreamBase = Pick<
   Stream,
   | 'id'
   | 'video_id'
@@ -27,6 +27,10 @@ export type HomeStream = Pick<
   | 'corner_names'
   | 'thumbnail_url'
 >
+
+export type HomeStream = HomeStreamBase & {
+  chapters: { stream_id: string }[] | null
+}
 
 export type HomePageState = {
   view: HomeView
@@ -44,6 +48,27 @@ export type HomePageMeta = {
 export type HomePageStreamResult = {
   streams: HomeStream[]
   resultCount: number
+}
+
+async function attachChapterStatus(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  streams: HomeStreamBase[],
+): Promise<HomeStream[]> {
+  if (streams.length === 0) {
+    return []
+  }
+
+  const streamIds = [...new Set(streams.map((stream) => stream.id))]
+  const chapterRes = await client.from('chapters').select('stream_id').in('stream_id', streamIds)
+  const streamIdsWithChapters = new Set(
+    ((chapterRes.data ?? []) as { stream_id: string }[]).map((chapter) => chapter.stream_id),
+  )
+
+  return streams.map((stream) => ({
+    ...stream,
+    chapters: streamIdsWithChapters.has(stream.id) ? [{ stream_id: stream.id }] : [],
+  }))
 }
 
 type SearchParamValue = string | string[] | undefined
@@ -158,7 +183,7 @@ export async function fetchHomePageStreams(
 ): Promise<HomePageStreamResult> {
   const { view, query, fuzzy, year, activeFilter } = state
 
-  let streams: HomeStream[] = []
+  let streams: HomeStreamBase[] = []
   let resultCount = 0
 
   const parsed = parseJapaneseDateFromQuery(query.trim())
@@ -195,7 +220,7 @@ export async function fetchHomePageStreams(
         page_size: 500,
       })
 
-      let results = (res.data ?? []) as HomeStream[]
+      let results = (res.data ?? []) as HomeStreamBase[]
 
       if (dateFrom) {
         results = results.filter((stream) => stream.stream_date >= dateFrom! && stream.stream_date < dateTo!)
@@ -213,7 +238,7 @@ export async function fetchHomePageStreams(
       resultCount = filtered.length
       streams = filtered.slice(0, 50)
     } else {
-      let textStreams: HomeStream[] = []
+      let textStreams: HomeStreamBase[] = []
 
       if (includes.length > 0) {
         const textConditions = includes.flatMap((keyword) => (
@@ -232,7 +257,7 @@ export async function fetchHomePageStreams(
         }
 
         const textRes = await textQueryBuilder.order('stream_date', { ascending: false })
-        textStreams = (textRes.data ?? []) as HomeStream[]
+        textStreams = (textRes.data ?? []) as HomeStreamBase[]
       }
 
       const entityIds = new Set<string>()
@@ -252,7 +277,7 @@ export async function fetchHomePageStreams(
         }
       }))
 
-      let entityStreams: HomeStream[] = []
+      let entityStreams: HomeStreamBase[] = []
 
       if (entityIds.size > 0) {
         const seRes = await client.from('stream_entities').select('stream_id').in('entity_id', [...entityIds])
@@ -271,7 +296,7 @@ export async function fetchHomePageStreams(
           }
 
           const entityRes = await entityQueryBuilder.order('stream_date', { ascending: false })
-          entityStreams = (entityRes.data ?? []) as HomeStream[]
+          entityStreams = (entityRes.data ?? []) as HomeStreamBase[]
         }
       }
 
@@ -304,7 +329,7 @@ export async function fetchHomePageStreams(
       .order('stream_date', { ascending: false })
       .limit(50)
 
-    streams = (res.data ?? []) as HomeStream[]
+    streams = (res.data ?? []) as HomeStreamBase[]
   } else if (view === 'top') {
     const countRes = await applyCardFilter(
       applyYearDate(client.from('streams').select('id', { count: 'exact', head: true })),
@@ -320,7 +345,7 @@ export async function fetchHomePageStreams(
       .order('stream_date', { ascending: false })
       .limit(year ? 20 : 10)
 
-    streams = (res.data ?? []) as HomeStream[]
+    streams = (res.data ?? []) as HomeStreamBase[]
   } else if (view === 'ranking-view') {
     const countRes = await applyCardFilter(
       applyYearDate(client.from('streams').select('id', { count: 'exact', head: true })),
@@ -336,11 +361,11 @@ export async function fetchHomePageStreams(
       .order('view_count', { ascending: false })
       .limit(20)
 
-    streams = (res.data ?? []) as HomeStream[]
+    streams = (res.data ?? []) as HomeStreamBase[]
   }
 
   return {
-    streams,
+    streams: await attachChapterStatus(client, streams),
     resultCount,
   }
 }
