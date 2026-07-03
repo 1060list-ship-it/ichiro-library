@@ -49,12 +49,16 @@
 - 進捗の `10_system/status/ichiro_status.md` 自動反映・`docs/PROJECT_STATE.md` 新設
 - 詳細・リスクは debate ファイル参照。**CRITIQUE反映後に実装**（Codex担当）
 
-### P1: v4プロンプト作成（`packages/pipeline/prompts/v4.txt`）
+### P1: v4プロンプト作成＋サーバー側ガード（完了・2026-07-04）
 
 - 語彙リスト本体（v3.txt 67〜89行相当）を **slug（日本語ラベル）併記** に書き換え。出力はslugのみと明示
 - 対象は is_active な25語彙（casual_talk / fan_interaction / relationships は掲載しない）
 - 出力例（190行相当）の `"tags": ["音楽制作", "ゲスト", "雑談"]` を `"tags": ["music_production", "guest"]` に修正（「雑談」残存の除去）
 - **タグ節以外は変更しない**（チャプター・要約の品質を7月処理分と同等に保ち、§6の救済を成立させるため）
+- **kana実装前レビューで追加判明した死角**: プロンプト側の指示だけではGeminiの出力遵守を保証できない（語彙外タグ2016件混入の実績あり）。`store.py` の `row["tags"] = ai_result.get("tags", [])` が無検証だった
+- **対応**: `store.py` に `normalize_tags(client, raw_tags)` を追加。`tag_vocabulary`（is_active）のslug集合・label→slug辞書と照合し、slug採用／label→slug変換／語彙外は破棄＋warningログ、を実施。`upsert_stream()` の書き込み直前に適用
+- 実装: memcho / テスト11件（togusa・全体39 passed）/ 独立検証: fuchikoma「検証OK」（2026-07-04）
+- 成果物: `packages/pipeline/prompts/v4.txt`（新規）・`packages/pipeline/store.py`（変更）・`packages/pipeline/tests/test_store_tags.py`（新規）。**未コミット**（一幾確認待ち）
 
 ### P2: フロントエンド対応（デプロイ順序制約あり）
 

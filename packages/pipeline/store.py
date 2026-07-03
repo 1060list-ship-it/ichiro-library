@@ -19,6 +19,8 @@ _REVIEW_LOCKED_FIELDS = [
     "talk_topics",
 ]
 
+_TAG_VOCAB_CACHE: Optional[tuple[set[str], dict[str, str]]] = None
+
 
 def get_supabase_client() -> Client:
     url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -39,6 +41,60 @@ def get_existing_stream(client: Client, video_id: str) -> Optional[dict]:
     ).eq("video_id", video_id).limit(1).execute()
     rows = resp.data or []
     return rows[0] if rows else None
+
+
+def _load_tag_vocabulary(client: Client) -> tuple[set[str], dict[str, str]]:
+    global _TAG_VOCAB_CACHE
+    if _TAG_VOCAB_CACHE is None:
+        resp = client.table("tag_vocabulary").select("slug, label").eq("is_active", True).execute()
+        rows = resp.data or []
+
+        slugs: set[str] = set()
+        label_to_slug: dict[str, str] = {}
+        for row in rows:
+            slug = row.get("slug")
+            label = row.get("label")
+            if not slug:
+                continue
+            slugs.add(slug)
+            if label:
+                label_to_slug[label] = slug
+
+        _TAG_VOCAB_CACHE = (slugs, label_to_slug)
+
+    return _TAG_VOCAB_CACHE
+
+
+def normalize_tags(client: Client, raw_tags: list[str]) -> list[str]:
+    if not raw_tags:
+        return []
+    if not isinstance(raw_tags, list):
+        logger.warning("未知タグを破棄: %s", raw_tags)
+        return []
+
+    slugs, label_to_slug = _load_tag_vocabulary(client)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in raw_tags:
+        if not isinstance(tag, str):
+            logger.warning("未知タグを破棄: %s", tag)
+            continue
+
+        if tag in slugs:
+            slug = tag
+        elif tag in label_to_slug:
+            slug = label_to_slug[tag]
+        else:
+            logger.warning("未知タグを破棄: %s", tag)
+            continue
+
+        if slug in seen:
+            continue
+        seen.add(slug)
+        normalized.append(slug)
+
+    return normalized
 
 
 def save_transcript_snapshot(client: Client, stream_id: str, source: str, snippets: list[dict]) -> str:
@@ -101,7 +157,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
 
     if ai_result:
         row["summary"]      = ai_result.get("summary")
-        row["tags"]         = ai_result.get("tags", [])
+        row["tags"]         = normalize_tags(client, ai_result.get("tags", []))
         row["corner_names"] = ai_result.get("corner_names", [])
         row["guests"]       = ai_result.get("guests", [])
         row["songs"]           = ai_result.get("songs", [])
