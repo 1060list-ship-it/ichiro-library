@@ -67,7 +67,6 @@ export default function StreamCard({
     month: 'long',
     day: 'numeric',
   })
-  const showUpdatingBadge = !stream.chapters || stream.chapters.length === 0
   const cornerSet = new Set(stream.corner_names ?? [])
   const tagsOnly = (stream.tags ?? []).filter((tag) => !cornerSet.has(tag))
   const showMemberActions = Boolean(currentUserId)
@@ -117,11 +116,6 @@ export default function StreamCard({
           <div className="space-y-1.5 p-3">
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-400">{date}</p>
-              {showUpdatingBadge && (
-                <span className="rounded-full border border-sky-200/10 bg-sky-300/10 px-2 py-0.5 text-[10px] font-medium text-sky-100/70">
-                  更新中
-                </span>
-              )}
             </div>
             <h2 className="pr-14 font-medium leading-snug line-clamp-2">{stream.title}</h2>
             {stream.summary && (

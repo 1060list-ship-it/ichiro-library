@@ -58,6 +58,14 @@ def save_transcript_snapshot(client: Client, stream_id: str, source: str, snippe
     return snapshot_id
 
 
+def _ai_metadata(ai_result: Optional[dict]) -> tuple[Optional[str], Optional[str]]:
+    if not ai_result:
+        return None, None
+    from summarize import MODEL_NAME, TARGET_PROMPT_VER
+
+    return MODEL_NAME, TARGET_PROMPT_VER
+
+
 def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict]) -> tuple[str, bool]:
     """
     streams テーブルに1件 upsert する。
@@ -71,6 +79,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         status = "transcript_failed"
     elif ai_result is None:
         status = "summary_failed"
+    ai_model, ai_prompt_ver = _ai_metadata(ai_result)
 
     row = {
         "video_id":      video_meta["video_id"],
@@ -86,8 +95,8 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "transcript":    transcript_text or None,
         "status":        status,
         "is_reviewed":   is_review_locked,
-        "ai_model":      "gemini-2.5-flash" if ai_result else None,
-        "ai_prompt_ver": "v3" if ai_result else None,
+        "ai_model":      ai_model,
+        "ai_prompt_ver": ai_prompt_ver,
     }
 
     if ai_result:
@@ -194,12 +203,9 @@ def _build_snapped_chapter_rows(client: Client, stream_id: str, chapters: list[d
     return rows
 
 
-def insert_chapters(client: Client, stream_id: str, chapters: list[dict], snapshot_id: Optional[str] = None):
+def insert_chapters(client: Client, stream_id: str, chapters: list[dict], snapshot_id: Optional[str] = None) -> int:
     if not chapters:
-        return
-
-    # 既存チャプターを削除してから再挿入
-    client.table("chapters").delete().eq("stream_id", stream_id).execute()
+        return 0
 
     if snapshot_id:
         try:
@@ -212,10 +218,13 @@ def insert_chapters(client: Client, stream_id: str, chapters: list[dict], snapsh
 
     if not rows:
         logger.info(f"chapters 挿入対象なし: stream_id={stream_id}")
-        return
+        return 0
 
+    # rows を確定してから置換する。全chapter drop時に既存chaptersを消さないため。
+    client.table("chapters").delete().eq("stream_id", stream_id).execute()
     client.table("chapters").insert(rows).execute()
     logger.info(f"chapters {len(rows)} 件を挿入: stream_id={stream_id} snapshot_id={snapshot_id or 'legacy'}")
+    return len(rows)
 
 
 def update_view_count_7d(client: Client, video_meta: dict):
