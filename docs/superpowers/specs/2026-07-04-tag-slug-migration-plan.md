@@ -66,10 +66,16 @@
 - フォールバックがあれば移行期間中（slug/日本語混在）も表示が壊れないため、フロントは再処理より先にデプロイしてよい。**フォールバックなしの先行デプロイは禁止**
 - タグクリック絞り込み（Phase 2 UIタスク）はslug統一完了後に着手
 
-### P3: DB整備（マイグレーション）
+### P3: DB整備（マイグレーション・完了・2026-07-04）
 
 - `tag_vocabulary`: casual_talk / fan_interaction / relationships を `is_active=false` に更新
 - migration017 の COMMENT に残る架空slug（music_talk / late_night）を実在語彙に修正
+- **kana実装前レビュー指摘（2026-07-04）**: migration017ファイル自体は適用済みのため直接書き換え禁止（`supabase db push`のチェックサム照合でドリフト検知＝事故る）。新規マイグレーション（028）側で`COMMENT ON COLUMN`を上書きする形で対応する
+- **副作用確認済み**: `apps/web/src/`はtag_vocabularyを一切参照せず（grep 0件）、store.pyはservice_role接続のためRLSバイパス、streams.tagsカラムとは独立。フロント・既存データへの影響ゼロ
+- **申し送り**: streams.tagsに残る casual_talk/fan_interaction/relationships 等の自由記述タグは、P2のタグクリック絞り込みJOIN時に孤児タグ化しうる。P2着手前に要考慮（P3の欠陥ではない）
+- **実装**: borma（ファイル作成）→ prod_guard承認（一幾）→ Supabase MCP経由で適用（`supabase db push`はDBパスワード未設定のため使用不可。CLIパスは今後別途復旧要）
+- **適用結果**: `tag_vocabulary`のcasual_talk/fan_interaction/relationshipsが`is_active=false`、active件数25で確認済み。ローカルファイル名`20260704004801_028_...`をリモート適用バージョンに合わせてリネーム済み
+- **副次発見**: ローカルの`027_search_logs_insert_policy.sql`がリモート`list_migrations`に存在せず、既存ドリフトあり（本タスク範囲外・別途対応要）
 
 ### P4: 承認ゲート＋バックアップ＋クリア（不可逆操作）
 
