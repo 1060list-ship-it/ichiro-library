@@ -17,7 +17,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 logger = logging.getLogger(__name__)
 
-TARGET_PROMPT_VER = "v3"
+TARGET_PROMPT_VER = "v4"
 PROMPT_VERSION = TARGET_PROMPT_VER
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{TARGET_PROMPT_VER}.txt"
 SONG_CATALOG_PATH = Path(__file__).parent / "prompts" / "song_catalog.txt"
