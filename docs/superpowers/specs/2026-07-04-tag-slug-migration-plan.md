@@ -80,12 +80,16 @@
 - **適用結果**: `tag_vocabulary`のcasual_talk/fan_interaction/relationshipsが`is_active=false`、active件数25で確認済み。ローカルファイル名`20260704004801_028_...`をリモート適用バージョンに合わせてリネーム済み
 - **副次発見**: ローカルの`027_search_logs_insert_policy.sql`がリモート`list_migrations`に存在せず、既存ドリフトあり（本タスク範囲外・別途対応要）
 
-### P4: 承認ゲート＋バックアップ＋クリア（不可逆操作）
+### P4: 承認ゲート＋バックアップ＋クリア（不可逆操作・完了 2026-07-04）
 
-1. バックアップは**クリア直前の1回のみ**：`chapters` テーブル全行＋`streams` の `highlights`・`tags`・`summary` カラムをバックアップテーブル（`_backup_20260704` サフィックス）へ複製
-2. バックアップ件数の検証出力を一幾に提示
-3. **一幾の明示GOを得てから**クリア実行（chapters削除・対象カラムのリセット）。GOなしに実行するコマンドを用意しない
-4. prod_guard 稼働下で実施（停止系操作の誤爆防止）
+- **スコープ確定（一幾確認済み）**: クリア対象は`chapters`全行＋`streams.highlights`のみ。`tags`・`summary`は対象外（P5の`ai_prompt_ver`基準の冪等再開ロジックで別途上書きされるため事前クリア不要と判断）
+- 実行SQLは`10_system/debate/2026-06-22_verify-borma.md`セクション4（borma設計）をベースに、kana実行前レビューで3点修正：
+  1. **rollback SQLの欠陥修正（最重要）**: migration016で追加された5列（snapshot_id等）が旧rollback文で復元漏れになりCHECK制約`chapters_snapshot_anchor_consistency`によりスナップ情報が静かに失われる不具合を発見。全列復元版に修正
+  2. reset UPDATEに`WHERE highlights IS DISTINCT FROM '[]'::jsonb`を追加（71件のみ対象、305件全件の`updated_at`一斉更新による020 RPCランキング崩れを回避）
+  3. `updated_at = now()`の明示指定を削除（`streams_updated_at`トリガーで自動処理されるため冗長と確認）
+- **再処理スキップ懸念の解消確認**: `reprocess_videos.py`の対象判定は`ai_prompt_ver != TARGET_PROMPT_VER`のみでchapters有無は見ないことをコード確認済み。chapters削除後も再処理対象から漏れない
+- **実行結果**: バックアップ（`chapters_backup_20260704` 277件・`streams_highlights_backup_20260704` 305件）を作成・件数完全一致を確認 → 一幾の明示GO取得 → クリア実行（chapters 277→0件、highlights非空71→0件、streams本体305件は無傷）→ 事後検証で件数確認済み
+- prod_guard稼働下（Supabase MCP経由、承認済みの本番DB操作フロー）で実施
 
 ### P5: パイロット→コスト試算→全件再処理
 
