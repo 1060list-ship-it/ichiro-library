@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { reportStreamSummary } from '../actions'
 import { linkifyEntities } from '@/lib/linkify'
+import { getTagLabel } from '@/lib/tag-labels'
 import {
   PUBLIC_CHAPTER_LIST_SELECT,
   PUBLIC_ENTITY_LINK_SELECT,
@@ -174,8 +175,9 @@ export default function StreamPage() {
               {stream.guests?.map((guest) => (
                 <span key={guest} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyEntities(guest, entities)}</span>
               ))}
+              {/* Phase 2でタグ絞り込みを実装する際は、生のtag値ではなくslug正規化したキーで統一すること（レガシー日本語タグとの分裂を防ぐ） */}
               {tagsOnly.map((tag) => (
-                <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{tag}</span>
+                <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{getTagLabel(tag)}</span>
               ))}
             </div>
           )

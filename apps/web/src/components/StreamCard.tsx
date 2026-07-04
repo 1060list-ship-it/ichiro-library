@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { type ReactNode, useState, useTransition } from 'react'
 import { toggleBookmark } from '@/app/member/actions'
+import { getTagLabel } from '@/lib/tag-labels'
 import type { Stream } from '@/lib/types'
 
 type StreamCardStream = Pick<
@@ -171,10 +172,11 @@ export default function StreamCard({
             <button
               key={tag}
               type="button"
+              // Phase 2でタグ絞り込みを実装する際は、生のtag値ではなくslug正規化したキーで統一すること（レガシー日本語タグとの分裂を防ぐ）
               onClick={() => onFilterSelect?.('tag', tag)}
               className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-300 transition hover:bg-gray-700 hover:text-white"
             >
-              {tag}
+              {getTagLabel(tag)}
             </button>
           ))}
         </div>

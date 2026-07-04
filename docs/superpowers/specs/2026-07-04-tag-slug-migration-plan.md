@@ -60,11 +60,14 @@
 - 実装: memcho / テスト11件（togusa・全体39 passed）/ 独立検証: fuchikoma「検証OK」（2026-07-04）
 - 成果物: `packages/pipeline/prompts/v4.txt`（新規）・`packages/pipeline/store.py`（変更）・`packages/pipeline/tests/test_store_tags.py`（新規）。**未コミット**（一幾確認待ち）
 
-### P2: フロントエンド対応（デプロイ順序制約あり）
+### P2: フロントエンド対応（完了・2026-07-04）
 
 - `tag-labels.ts`（slug→日本語表示マップ）に **`map.get(tag) ?? tag` フォールバック必須**
 - フォールバックがあれば移行期間中（slug/日本語混在）も表示が壊れないため、フロントは再処理より先にデプロイしてよい。**フォールバックなしの先行デプロイは禁止**
 - タグクリック絞り込み（Phase 2 UIタスク）はslug統一完了後に着手
+- **kana実装前レビュー指摘**: (1) slug→label対応がv4.txt/DB/tag-labels.tsの3箇所に分散するリスク→28件完全一致を検証するテストで鮮度を保証 (2) フォールバックは安全だが対応表更新漏れ時は英語slugがそのまま表示される仕様である旨、一幾に事前確認・承認済み (3) 表示はgetTagLabel()で変換するが絞り込みキーは生値のまま→Phase 2で孤児タグ化するリスクを申し送りコメントとして両ファイルに明記
+- 実装: paz / 独立検証: fuchikoma「検証OK」（fuchikomaが誤検出した1件のplaywright実行方法の齟齬はClaudeが再現確認し、pazの申告が正確だったことを確認済み）
+- 成果物: `apps/web/src/lib/tag-labels.ts`（新規）・`apps/web/src/components/StreamCard.tsx`（変更）・`apps/web/src/app/stream/[id]/page.tsx`（変更）・`apps/web/tests/tag-labels.spec.ts`（新規）
 
 ### P3: DB整備（マイグレーション・完了・2026-07-04）
 
