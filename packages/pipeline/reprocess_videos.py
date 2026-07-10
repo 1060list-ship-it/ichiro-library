@@ -452,14 +452,12 @@ def reprocess_one(
             snapshot_id = None
 
     chapters = ai_result.get("chapters") or []
-    if not chapters:
-        logger.warning(f"[{video_id}] chapters が空のため刻印せずスキップ")
-        return False
-
-    inserted_chapters = insert_chapters(supabase, stream_id, chapters, snapshot_id=snapshot_id)
-    if inserted_chapters <= 0:
-        logger.warning(f"[{video_id}] chapters 挿入0件のため刻印せずスキップ")
-        return False
+    inserted_chapters = 0
+    if chapters:
+        inserted_chapters = insert_chapters(supabase, stream_id, chapters, snapshot_id=snapshot_id)
+        if inserted_chapters <= 0:
+            logger.warning(f"[{video_id}] chapters 挿入0件のため刻印せずスキップ")
+            return False
 
     stream_update = {
         "summary":        ai_result.get("summary"),

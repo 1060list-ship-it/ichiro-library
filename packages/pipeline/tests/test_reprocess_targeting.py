@@ -1,5 +1,5 @@
 """
-S2/S4/S5: 対象選択クエリ（v3境界・reviewed除外・恒久失敗除外・--video優先・
+S2/S4/S5: 対象選択クエリ（TARGET_PROMPT_VER境界・reviewed除外・恒久失敗除外・--video優先・
 summary-missing-onlyの優先順位）と、処理済みカウントの整合性を検証する。
 
 reprocess_one()自体はスタブに差し替え、「どのvideo_idが対象として選ばれたか」だけを見る。
@@ -28,12 +28,18 @@ def _common_setup(monkeypatch, fake_supabase):
     monkeypatch.setattr(reprocess_videos.time, "sleep", lambda *_: None)
 
 
-def test_default_target_selection_v3_boundary_and_exclusions(monkeypatch, fake_supabase):
+def test_default_target_selection_target_prompt_boundary_and_exclusions(monkeypatch, fake_supabase):
+    target_prompt_ver = reprocess_videos.TARGET_PROMPT_VER
     rows = [
-        make_stream_row(id="s-v3", video_id="v3-done", ai_prompt_ver="v3"),
+        make_stream_row(id="s-target", video_id="target-done", ai_prompt_ver=target_prompt_ver),
         make_stream_row(id="s-null", video_id="null-ver", ai_prompt_ver=None),
         make_stream_row(id="s-v2", video_id="old-ver", ai_prompt_ver="v2"),
-        make_stream_row(id="s-reviewed-v3", video_id="reviewed-v3", ai_prompt_ver="v3", is_reviewed=True),
+        make_stream_row(
+            id="s-reviewed-target",
+            video_id="reviewed-target",
+            ai_prompt_ver=target_prompt_ver,
+            is_reviewed=True,
+        ),
         make_stream_row(id="s-reviewed-null", video_id="reviewed-null", ai_prompt_ver=None, is_reviewed=True),
         make_stream_row(
             id="s-transcript-failed", video_id="transcript-failed", ai_prompt_ver=None, status="transcript_failed"
@@ -48,10 +54,10 @@ def test_default_target_selection_v3_boundary_and_exclusions(monkeypatch, fake_s
 
     video_ids = {c["video_id"] for c in seen}
     assert video_ids == {"null-ver", "old-ver"}
-    # ai_prompt_ver='v3'は対象外
-    assert "v3-done" not in video_ids
+    # ai_prompt_ver=TARGET_PROMPT_VERは対象外
+    assert "target-done" not in video_ids
     # reviewed行はai_prompt_ver未達でも対象外
-    assert "reviewed-v3" not in video_ids
+    assert "reviewed-target" not in video_ids
     assert "reviewed-null" not in video_ids
     # 恒久失敗ステータスは対象外（無限リトライ防止）
     assert "transcript-failed" not in video_ids
@@ -94,10 +100,11 @@ def test_video_flag_bypasses_all_filters_and_forces_reviewed_row(monkeypatch, fa
     assert seen == [{"video_id": "target-video", "force": True}]
 
 
-def test_count_processed_streams_counts_v3_or_reviewed_but_not_permanent_failures(fake_supabase):
+def test_count_processed_streams_counts_target_prompt_or_reviewed_but_not_permanent_failures(fake_supabase):
+    target_prompt_ver = reprocess_videos.TARGET_PROMPT_VER
     rows = [
-        make_stream_row(id="s-1", video_id="v3-a", ai_prompt_ver="v3"),
-        make_stream_row(id="s-2", video_id="v3-b", ai_prompt_ver="v3"),
+        make_stream_row(id="s-1", video_id="target-a", ai_prompt_ver=target_prompt_ver),
+        make_stream_row(id="s-2", video_id="target-b", ai_prompt_ver=target_prompt_ver),
         make_stream_row(id="s-3", video_id="reviewed-null", ai_prompt_ver=None, is_reviewed=True),
         make_stream_row(id="s-4", video_id="not-done", ai_prompt_ver=None),
         make_stream_row(id="s-5", video_id="transcript-failed", ai_prompt_ver=None, status="transcript_failed"),
@@ -106,7 +113,7 @@ def test_count_processed_streams_counts_v3_or_reviewed_but_not_permanent_failure
 
     count = reprocess_videos._count_processed_streams(fake_supabase)
 
-    # v3-a, v3-b, reviewed-null の3件。not-doneとtranscript-failedは処理済みに含まれない。
+    # target-a, target-b, reviewed-null の3件。not-doneとtranscript-failedは処理済みに含まれない。
     assert count == 3
 
 

@@ -92,8 +92,10 @@ def test_reprocess_one_does_not_stamp_version_when_chapters_insert_returns_zero(
     ]
 
 
-def test_reprocess_one_empty_chapters_from_ai_never_calls_insert_chapters(monkeypatch, fake_supabase):
-    """AIの応答自体にchaptersが無い（空配列）場合は、insert_chaptersに到達する前に弾かれる。"""
+def test_reprocess_one_empty_chapters_from_ai_still_updates_stream_without_calling_insert_chapters(
+    monkeypatch, fake_supabase
+):
+    """AIの応答自体にchaptersが無い（空配列）場合も、streams側の要約・刻印は更新される。"""
     row = make_stream_row()
     fake_supabase.seed("streams", row)
 
@@ -112,6 +114,13 @@ def test_reprocess_one_empty_chapters_from_ai_never_calls_insert_chapters(monkey
 
     result = reprocess_videos.reprocess_one(fake_supabase, object(), row, dry_run=False)
 
-    assert result is False
+    assert result is True
     insert_chapters_mock.assert_not_called()
-    assert fake_supabase.update_calls == []
+    stream_updates = [c for c in fake_supabase.update_calls if c["table"] == "streams"]
+    assert len(stream_updates) == 1
+    payload = stream_updates[0]["payload"]
+    assert payload["summary"] == "要約テキスト"
+    assert payload["tags"] == []
+    assert payload["highlights"] == []
+    assert payload["ai_model"] == reprocess_videos.MODEL_NAME
+    assert payload["ai_prompt_ver"] == reprocess_videos.TARGET_PROMPT_VER
