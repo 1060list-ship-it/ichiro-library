@@ -19,8 +19,10 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 
 from batch_runner import run_batch
+from reprocess_videos import _count_processed_streams, _exclude_permanent_failures, _exclude_reviewed
 from reprocess_videos import run as run_reprocess
 from store import get_supabase_client
+from summarize import TARGET_PROMPT_VER
 from weekly_magazine import generate_magazine
 
 logging.basicConfig(
@@ -158,6 +160,21 @@ def write_status_file(client) -> None:
         total_resp = client.table("streams").select("video_id", count="exact").execute()
         total = total_resp.count or 0
 
+        progress_line = None
+        try:
+            processed = _count_processed_streams(client)
+            remaining_query = client.table("streams").select("id", count="exact")
+            remaining_query = remaining_query.or_(f"ai_prompt_ver.is.null,ai_prompt_ver.neq.{TARGET_PROMPT_VER}")
+            remaining_query = _exclude_permanent_failures(_exclude_reviewed(remaining_query))
+            remaining = remaining_query.execute().count or 0
+
+            if total > 0:
+                pct = processed / total * 100
+                status_label = "完了" if remaining == 0 else f"残り{remaining}件"
+                progress_line = f"- タグ刻印({TARGET_PROMPT_VER})進捗: {processed}/{total}件（{pct:.1f}%）— {status_label}\n"
+        except Exception as exc:
+            logger.warning("progress calculation failed: %s", exc)
+
         latest_resp = (
             client.table("streams")
             .select("title,stream_date,status")
@@ -198,6 +215,8 @@ def write_status_file(client) -> None:
             f"\n更新: {now.strftime('%Y-%m-%d %H:%M')} UTC\n\n",
             f"- 総動画数: {total}件\n",
         ]
+        if progress_line:
+            lines.append(progress_line)
         if latest:
             lines.append(f"- 最終取り込み: {latest['stream_date']} 「{latest['title'][:30]}…」 ({latest['status']})\n")
         if latest_mag:
