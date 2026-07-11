@@ -160,6 +160,15 @@ select ai_prompt_ver, count(*) from streams group by 1;
 - chapters件数・highlights充足率の確認
 - `ichiro_status.md` に完了状態が自動反映されていることの確認
 
+#### 2026-07-11 P6完了（タグslug化プロジェクト全体完了）
+
+- fuchikoma事後検証を2ラウンド実施
+  - 1stラウンド: 語彙外タグ0件（合格）／ai_prompt_ver内訳 v4=306件・NULL=1件（transcript_failed）・v3=0件・summary_failed=0件、計画書見込み304件との差分+2件は7/4以降の新規取り込み分と判明（合格）／chapters総件数1069件・chapters=0の64件中63件は`chapters=[]`が正規結果で正常、highlights充足率96.09%（合格）／**`ichiro_status.md`への完了状態自動反映が未実装と判定（不合格）**
+  - 項目4対応: kanaクリティカルレビューで「独自集計を書かず`reprocess_videos.py`の正本ロジック（`_count_processed_streams()`・`_exclude_permanent_failures()`・`_exclude_reviewed()`・`TARGET_PROMPT_VER`)を流用すること」「`is_reviewed`除外を無視すると永久未完了表示になる」等のmust-fix指摘 → 反映してmemcho実装（`worker.py`の`write_status_file()`に進捗集計を独立try/exceptで追加、コミット`1974e78`）
+  - 2ndラウンド: 正本ロジックのimport・バージョン文字列ハードコードなし・進捗集計失敗時も既存出力を維持する退行なし・実DB照合（`is_reviewed=true`かつ未v4化の行は0件）を確認し**合格**
+- **P6受け入れ基準4項目全て合格。タグslug化プロジェクト（P1〜P6）完全完了**
+- 副産物: fuchikoma検証セッション中にCodexのカレントディレクトリ起因で`packages/pipeline/10_system/agent_monitor/DASHBOARD.md`（AI_work本来のagent監視ファイルの誤配置複製、空プレースホルダー）が生成されていたのを発見・削除
+
 ## 5. 実行順序
 
 P0実装（debate反映後）→ P1 → P3 → P2（フォールバック込み）→ P4（承認ゲート）→ P5 → P6
