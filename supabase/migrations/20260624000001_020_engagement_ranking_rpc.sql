@@ -10,39 +10,10 @@ SECURITY INVOKER
 SET search_path = public
 AS $$
   SELECT
-    ROW(
-      s.id,
-      s.video_id,
-      s.title,
-      s.stream_date,
-      s.duration_min,
-      s.view_count,
-      s.view_count_7d,
-      s.comment_count,
-      s.summary,
-      s.tags,
-      s.corner_names,
-      s.guests,
-      NULL::text,
-      s.youtube_url,
-      s.thumbnail_url,
-      s.status,
-      s.channel_id,
-      s.ai_model,
-      s.ai_prompt_ver,
-      s.is_reviewed,
-      s.avg_rating,
-      s.rating_count,
-      s.created_at,
-      s.updated_at,
-      s.like_count,
-      s.songs,
-      s.talk_topics,
-      s.has_live_singing,
-      s.highlights,
-      s.has_live_viewing,
-      s.started_at
-    )::public.streams
+    (jsonb_populate_record(
+      NULL::public.streams,
+      to_jsonb(s) - 'transcript'
+    )).*
   FROM public.streams s
   WHERE s.comment_count IS NOT NULL
     AND s.view_count IS NOT NULL

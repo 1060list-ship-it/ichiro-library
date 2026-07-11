@@ -1,0 +1,2 @@
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS has_live_singing BOOLEAN DEFAULT false;
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]'::jsonb;
