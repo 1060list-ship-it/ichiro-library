@@ -10,7 +10,7 @@ import {
   PUBLIC_STREAM_MAGAZINE_MAP_SELECT,
 } from '@/lib/selects'
 import { supabase } from '@/lib/supabase'
-import { linkifyEntities } from '@/lib/linkify'
+import { linkifyBody, linkifyEntities } from '@/lib/linkify'
 import type { Entity } from '@/lib/types'
 
 // -----------------------------------------------------------------------
@@ -184,7 +184,7 @@ function HighlightsSection({
 
                       {/* 発言内容 */}
                       <span className="text-sm text-gray-200 leading-relaxed flex-1">
-                        「{linkifyEntities(h.quote, entities)}」
+                        「{linkifyBody(h.quote, entities)}」
                       </span>
 
                       <a
@@ -260,7 +260,7 @@ function SongsSection({
                 </span>
                 {/* 曲名 */}
                 <div className="flex-1 min-w-0 space-y-0.5">
-                  <p className="text-sm text-gray-200 leading-snug">{linkifyEntities(title, entities)}</p>
+                  <p className="text-sm text-gray-200 leading-snug">{linkifyBody(title, entities)}</p>
                   {streamTitle && (
                     <StreamSourceBadge title={streamTitle} />
                   )}
@@ -466,7 +466,7 @@ export default function MagazineWeekPage() {
 
         {/* イントロ */}
         <div className="border-l-2 border-gray-700 pl-4">
-          <p className="text-sm text-gray-300 leading-relaxed">{linkifyEntities(content.intro, entities)}</p>
+          <p className="text-sm text-gray-300 leading-relaxed">{linkifyBody(content.intro, entities)}</p>
         </div>
 
         {/* トピック */}
@@ -476,8 +476,8 @@ export default function MagazineWeekPage() {
             <div className="space-y-3">
               {content.topics.map((topic, i) => (
                 <div key={i} className="bg-gray-900 rounded-xl p-4 space-y-2">
-                  <h3 className="text-sm font-bold text-white">{linkifyEntities(topic.title, entities)}</h3>
-                  <p className="text-sm text-gray-300 leading-relaxed">{linkifyEntities(topic.body, entities)}</p>
+                  <h3 className="text-sm font-bold text-white">{linkifyBody(topic.title, entities)}</h3>
+                  <p className="text-sm text-gray-300 leading-relaxed">{linkifyBody(topic.body, entities)}</p>
                   {topic.streams?.length > 0 && (
                     <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-800/80 mt-2">
                       {topic.streams.map((s, j) => (
@@ -529,7 +529,7 @@ export default function MagazineWeekPage() {
         {content.editor_note && (
           <section className="border-t border-gray-800/80 pt-8">
             <p className="text-xs text-gray-600 mb-2 uppercase tracking-widest">編集後記</p>
-            <p className="text-sm text-gray-400 leading-relaxed">{linkifyEntities(content.editor_note, entities)}</p>
+            <p className="text-sm text-gray-400 leading-relaxed">{linkifyBody(content.editor_note, entities)}</p>
           </section>
         )}
 

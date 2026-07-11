@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { reportStreamSummary } from '../actions'
-import { linkifyEntities } from '@/lib/linkify'
+import { linkifyBody, linkifyEntities } from '@/lib/linkify'
 import { getTagLabel } from '@/lib/tag-labels'
 import {
   PUBLIC_CHAPTER_LIST_SELECT,
@@ -46,7 +46,7 @@ function HighlightList({ highlights, videoId, entities }: { highlights: Highligh
               <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
                 {h.reason}
               </span>
-              <span className="text-sm text-gray-200 leading-snug flex-1">「{linkifyEntities(h.quote, entities)}」</span>
+              <span className="text-sm text-gray-200 leading-snug flex-1">「{linkifyBody(h.quote, entities)}」</span>
               <a
                 href={url}
                 target="_blank"
@@ -170,14 +170,26 @@ export default function StreamPage() {
           return (
             <div className="flex flex-wrap gap-2">
               {stream.corner_names?.map((cornerName) => (
-                <span key={cornerName} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{cornerName}</span>
+                <Link
+                  key={cornerName}
+                  href={`/?corner=${encodeURIComponent(cornerName)}`}
+                  className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full"
+                >
+                  {cornerName}
+                </Link>
               ))}
               {stream.guests?.map((guest) => (
                 <span key={guest} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyEntities(guest, entities)}</span>
               ))}
               {/* Phase 2でタグ絞り込みを実装する際は、生のtag値ではなくslug正規化したキーで統一すること（レガシー日本語タグとの分裂を防ぐ） */}
               {tagsOnly.map((tag) => (
-                <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{getTagLabel(tag)}</span>
+                <Link
+                  key={tag}
+                  href={`/?tag=${encodeURIComponent(tag)}`}
+                  className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full"
+                >
+                  {getTagLabel(tag)}
+                </Link>
               ))}
             </div>
           )
@@ -187,7 +199,7 @@ export default function StreamPage() {
         {stream.summary && (
           <div className="bg-gray-900 rounded-lg p-4 space-y-1">
             <p className="text-xs text-gray-500 font-medium">AI要約</p>
-            <p className="text-sm text-gray-200 leading-relaxed">{linkifyEntities(stream.summary, entities)}</p>
+            <p className="text-sm text-gray-200 leading-relaxed">{linkifyBody(stream.summary, entities)}</p>
             <div className="pt-2 space-y-1">
               {!reported && !reporting && (
                 <p className="text-xs text-gray-500">要約が気になる場合はお知らせください。</p>

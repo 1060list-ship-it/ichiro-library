@@ -4,6 +4,10 @@ import type { Entity } from './types'
 
 type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
 
+// このライブラリの性質上、本文中に自明に頻出しリンクしても情報価値が薄いエンティティ。
+// リストが増えて管理が煩雑になる場合は entities.linkify_in_body (boolean, default true) カラムへの移行を検討。
+const BODY_LINKIFY_EXCLUDED_SLUGS = ['yamaguchi-ichiro', 'sakanaction']
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -46,4 +50,8 @@ export function linkifyEntities(text: string | null | undefined, entities: Linka
       </Link>
     )
   })
+}
+
+export function linkifyBody(text: string | null | undefined, entities: LinkableEntity[]): ReactNode {
+  return linkifyEntities(text, entities.filter((entity) => !BODY_LINKIFY_EXCLUDED_SLUGS.includes(entity.slug)))
 }

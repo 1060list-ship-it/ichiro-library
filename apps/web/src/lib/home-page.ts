@@ -343,7 +343,7 @@ export async function fetchHomePageStreams(
       activeFilter,
     )
       .order('stream_date', { ascending: false })
-      .limit(year ? 20 : 10)
+      .limit(activeFilter ? 500 : (year ? 20 : 10))
 
     streams = (res.data ?? []) as HomeStreamBase[]
   } else if (view === 'ranking-view') {
@@ -359,7 +359,7 @@ export async function fetchHomePageStreams(
       activeFilter,
     )
       .order('view_count', { ascending: false })
-      .limit(20)
+      .limit(activeFilter ? 500 : 20)
 
     streams = (res.data ?? []) as HomeStreamBase[]
   }
