@@ -408,8 +408,8 @@ export default function StreamEditorClient({ videoId }: Props) {
     try {
       const result = await scrutinizeStreamSummary(stream.video_id)
       setScrutinyResult(result)
-    } catch {
-      setScrutinyError('確認に失敗しました')
+    } catch (error) {
+      setScrutinyError(error instanceof Error ? error.message : '確認に失敗しました。')
     } finally {
       setScrutinizing(false)
     }

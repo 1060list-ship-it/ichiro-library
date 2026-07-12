@@ -776,6 +776,164 @@ function parseSuggestEntityResult(content: string): SuggestEntityResult | null {
   }
 }
 
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string
+      }>
+    }
+    finishReason?: string
+  }>
+  promptFeedback?: {
+    blockReason?: string
+  }
+}
+
+type CallGeminiJsonOptions = {
+  systemInstruction: string
+  prompt: string
+  temperature: number
+  maxOutputTokens: number
+}
+
+const GEMINI_GENERATE_CONTENT_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+const GEMINI_TIMEOUT_MS = 20_000
+
+function geminiHttpErrorMessage(status: number, details: string) {
+  if (status === 429) {
+    const normalizedDetails = details.toLowerCase()
+    const monthlySpendTerms = [
+      'monthly spend cap',
+      'monthly usage cap',
+      'billing account tier spend cap',
+      'start of the next billing cycle',
+      'next billing cycle',
+      'project-level spend cap',
+      'spend cap',
+      'prepay credit balance',
+      'credit balance',
+      'no credits',
+    ]
+    const perMinuteTerms = [
+      'per minute',
+      'per-minute',
+      'per_minute',
+      'perminute',
+      'rpm',
+      'tpm',
+      'requestsperminute',
+      'tokensperminute',
+      'request limit per minute',
+      'token limit per minute',
+    ]
+
+    if (monthlySpendTerms.some((term) => normalizedDetails.includes(term))) {
+      return 'Gemini APIの月間利用上限に達しています。利用状況を確認してください。'
+    }
+
+    if (perMinuteTerms.some((term) => normalizedDetails.includes(term))) {
+      return 'Gemini APIが混み合っています。時間をおいて再試行してください。'
+    }
+
+    return 'Gemini APIの利用上限に達しているか、混み合っています。時間をおいて再試行してください。'
+  }
+
+  if (status === 401 || status === 403) {
+    return 'Gemini APIの認証に失敗しました。設定を確認してください。'
+  }
+
+  if (status >= 500) {
+    return 'Gemini APIで一時的な障害が発生しています。時間をおいて再試行してください。'
+  }
+
+  return `Gemini APIリクエストに失敗しました（HTTP ${status}）。`
+}
+
+async function callGeminiJson({
+  systemInstruction,
+  prompt,
+  temperature,
+  maxOutputTokens,
+}: CallGeminiJsonOptions): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim()
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY が設定されていません。')
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(GEMINI_GENERATE_CONTENT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
+        contents: [{
+          role: 'user',
+          parts: [{ text: prompt }],
+        }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens,
+          responseMimeType: 'application/json',
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => '')
+      throw new Error(geminiHttpErrorMessage(response.status, details))
+    }
+
+    let payload: GeminiGenerateContentResponse
+    try {
+      payload = await response.json() as GeminiGenerateContentResponse
+    } catch {
+      throw new Error('Gemini APIの応答形式が不正です。')
+    }
+    const blockReason = payload.promptFeedback?.blockReason
+    if (blockReason) {
+      throw new Error('Gemini APIが入力をブロックしました。入力内容を確認してください。')
+    }
+
+    const candidate = payload.candidates?.[0]
+    const finishReason = candidate?.finishReason
+    if (finishReason && finishReason !== 'STOP') {
+      throw new Error(`Gemini APIが応答を完了できませんでした（${finishReason}）。`)
+    }
+
+    const content = candidate?.content?.parts?.[0]?.text
+    if (typeof content !== 'string' || !content.trim()) {
+      throw new Error('Gemini APIから有効な応答を受け取れませんでした。')
+    }
+
+    return content
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Gemini APIの応答がタイムアウトしました。時間をおいて再試行してください。')
+    }
+
+    if (error instanceof Error) {
+      throw error
+    }
+
+    throw new Error('Gemini APIへの接続に失敗しました。時間をおいて再試行してください。')
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export async function fetchAdminEntities(): Promise<AdminEntity[]> {
   await requireRole(['admin'])
   const { data, error } = await supabaseAdmin
@@ -867,29 +1025,9 @@ export async function suggestEntityFields(name: string): Promise<SuggestEntityRe
     return createEmptySuggestEntityResult()
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
-  if (!apiKey) {
-    return createEmptySuggestEntityResult()
-  }
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4.1-mini',
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'system',
-            content: 'あなたはサカナクション・山口一郎の音楽活動に詳しいアシスタントです。JSON以外は出力しないでください。',
-          },
-          {
-            role: 'user',
-            content: `「${normalizedName}」というエンティティについて以下フィールドを推測してJSONで返してください。
+  const content = await callGeminiJson({
+    systemInstruction: 'あなたはサカナクション・山口一郎の音楽活動に詳しいアシスタントです。JSON以外は出力しないでください。',
+    prompt: `「${normalizedName}」というエンティティについて以下フィールドを推測してJSONで返してください。
 
 カテゴリ候補（いずれか1つ）:
 - family: 家族・地元関係者
@@ -911,22 +1049,27 @@ export async function suggestEntityFields(name: string): Promise<SuggestEntityRe
   "externalUrl": "公式URL（あれば、なければ空文字）"
 }
 不明なフィールドは空文字または空配列にしてください。`,
-          },
-        ],
-      }),
-    })
+    temperature: 0.3,
+    maxOutputTokens: 1024,
+  })
 
-    if (!response.ok) {
-      return createEmptySuggestEntityResult()
-    }
+  const normalized = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
 
-    const payload = await response.json() as OpenAIChatCompletionResponse
-    const content = extractScrutinyContent(payload.choices?.[0]?.message?.content)
-
-    return parseSuggestEntityResult(content) ?? createEmptySuggestEntityResult()
+  try {
+    JSON.parse(normalized)
   } catch {
-    return createEmptySuggestEntityResult()
+    throw new Error('Gemini APIの応答をJSONとして解析できませんでした。')
   }
+
+  const parsed = parseSuggestEntityResult(content)
+  if (!parsed) {
+    throw new Error('Gemini APIの応答形式が不正です。')
+  }
+
+  return parsed
 }
 
 export async function markStreamReviewed(videoId: string): Promise<AdminEditableStream> {
@@ -978,31 +1121,9 @@ export type ScrutinyResult = {
   entities: ScrutinyEntity[]
 }
 
-type OpenAIChatCompletionResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }> | null
-    } | null
-  }>
-}
-
 type RawScrutinyEntity = {
   name?: unknown
   category?: unknown
-}
-
-function extractScrutinyContent(content: string | Array<{ type?: string; text?: string }> | null | undefined) {
-  if (typeof content === 'string') {
-    return content
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
-      .join('')
-  }
-
-  return ''
 }
 
 function parseScrutinyEntities(content: string) {
@@ -1068,46 +1189,30 @@ export async function scrutinizeStreamSummary(videoId: string): Promise<Scrutiny
     return { entities: [] }
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
-  if (!apiKey) {
-    return { entities: [] }
-  }
+  const content = await callGeminiJson({
+    systemInstruction: 'あなたはNERの専門家です。JSON配列のみ出力してください。',
+    prompt: `以下はサカナクション 山口一郎のライブ配信要約です。固有名詞（曲名・人名・アーティスト名・イベント名・会場名）を全て抽出してJSON配列で返してください。\n\n要約:\n${summary}\n\n出力形式（JSONのみ）:\n[{"name": "固有名詞", "category": "song|person|event|venue|other"}]`,
+    temperature: 0,
+    maxOutputTokens: 2048,
+  })
 
-  let parsedEntities: Array<{ name: string; category: string }> = []
+  const normalized = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
 
+  let rawEntities: unknown
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4.1-mini',
-        temperature: 0,
-        messages: [
-          {
-            role: 'system',
-            content: 'あなたはNERの専門家です。JSON配列のみ出力してください。',
-          },
-          {
-            role: 'user',
-            content: `以下はサカナクション 山口一郎のライブ配信要約です。固有名詞（曲名・人名・アーティスト名・イベント名・会場名）を全て抽出してJSON配列で返してください。\n\n要約:\n${summary}\n\n出力形式（JSONのみ）:\n[{"name": "固有名詞", "category": "song|person|event|venue|other"}]`,
-          },
-        ],
-      }),
-    })
-
-    if (!response.ok) {
-      return { entities: [] }
-    }
-
-    const payload = await response.json() as OpenAIChatCompletionResponse
-    const content = extractScrutinyContent(payload.choices?.[0]?.message?.content)
-    parsedEntities = parseScrutinyEntities(content)
+    rawEntities = JSON.parse(normalized)
   } catch {
-    return { entities: [] }
+    throw new Error('Gemini APIの応答をJSONとして解析できませんでした。')
   }
+
+  if (!Array.isArray(rawEntities)) {
+    throw new Error('Gemini APIの応答形式が不正です。')
+  }
+
+  const parsedEntities = parseScrutinyEntities(content)
 
   if (parsedEntities.length === 0) {
     return { entities: [] }

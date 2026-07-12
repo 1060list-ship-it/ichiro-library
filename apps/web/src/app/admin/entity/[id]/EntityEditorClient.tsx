@@ -64,6 +64,7 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
   async function handleSuggest() {
     if (!name.trim()) return
     setSuggesting(true)
+    setError('')
     try {
       const result: SuggestEntityResult = await suggestEntityFields(name.trim())
       if (result.slug) setSlug(result.slug)
@@ -73,8 +74,8 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
       if (result.matchNames.length > 0) setMatchNames(result.matchNames)
       if (result.relatedWork) setRelatedWork(result.relatedWork)
       if (result.externalUrl) setExternalUrl(result.externalUrl)
-    } catch {
-      // silent fail
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'AIによる自動入力に失敗しました。')
     } finally {
       setSuggesting(false)
     }
