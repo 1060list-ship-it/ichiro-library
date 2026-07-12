@@ -1,10 +1,25 @@
 -- Seed data for local development / initial testing
 -- Run AFTER 001_initial_schema.sql
 
+BEGIN;
+
+-- Local seed でも streams.tags を統制語彙に限定する。
+INSERT INTO tag_vocabulary (slug, label, category, sort_order, is_active) VALUES
+  ('music_production', '音楽制作', 'content', 10, true),
+  ('guest', 'ゲスト', 'content', 20, true),
+  ('gaming', 'ゲーム', 'content', 30, true)
+ON CONFLICT (slug) DO UPDATE SET
+  label = EXCLUDED.label,
+  category = EXCLUDED.category,
+  sort_order = EXCLUDED.sort_order,
+  is_active = EXCLUDED.is_active;
+
 -- ============================================================
 -- Sample streams (3 entries)
 -- ============================================================
-INSERT INTO streams (
+CREATE TEMP TABLE tag_guard_seed_streams (LIKE streams INCLUDING DEFAULTS);
+
+INSERT INTO tag_guard_seed_streams (
   video_id, title, stream_date, duration_min,
   view_count, comment_count,
   summary, tags, corner_names, guests,
@@ -20,7 +35,7 @@ INSERT INTO streams (
   18500,
   342,
   '深夜の独り語り配信。最近リリースされたサカナクションの新曲制作の裏話、スタジオでの試行錯誤、歌詞に込めた思いについて語った。後半はリスナーからの質問コーナーとして、音楽理論や作曲プロセスについても丁寧に回答。「音楽は問いを立てること」という山口一郎の哲学が随所に滲む配信となった。',
-  ARRAY['音楽', '作曲', 'サカナクション', '深夜ラジオ', '新曲', 'Q&A'],
+  ARRAY['music_production'],
   ARRAY['未知との遭遇'],
   ARRAY[]::TEXT[],
   '（サンプル字幕テキスト）こんばんは。今夜も来てくれてありがとうございます。深夜ですね。眠れない人、いますか？僕も眠れないんですよね、最近。で、スタジオに行って音を出してみると、なんか見えてくるものがあって。新曲の話をしようかな。',
@@ -39,7 +54,7 @@ INSERT INTO streams (
   42300,
   891,
   'スピッツ・草野マサムネをゲストに迎えた深夜対談。お互いの作詞スタイルの違い、言葉の選び方へのこだわり、90年代の音楽シーンの記憶などを語り合った。草野が「詩はウソをつかない」と発言した場面がハイライトとなり、コメント欄でも大きな反響を呼んだ。終盤は二人でプレイリストを共有し合うセッションも。',
-  ARRAY['対談', 'スピッツ', '草野マサムネ', '作詞', '90年代', '音楽'],
+  ARRAY['guest', 'music_production'],
   ARRAY['深夜対談'],
   ARRAY['草野マサムネ'],
   '（サンプル字幕テキスト）今夜はですね、スペシャルゲストを迎えております。スピッツの草野マサムネさんです。草野さん、久しぶりですね。そうですね、久しぶり。最後に会ったのいつでしたっけ。あのフェスかな、去年の。そうそう。今日は言葉と音楽の話をしたくて呼びました。',
@@ -58,7 +73,7 @@ INSERT INTO streams (
   9800,
   215,
   '「未知との遭遇」コーナー企画として、山口一郎が最近個人的に聴きまくっている楽曲10選を紹介。ジャンルはポストクラシカル、ケルト音楽、シティポップのリイシュー盤まで幅広く、それぞれ選んだ理由や音楽的な着眼点を丁寧に解説した。「この曲の低音の使い方が衝撃で」など具体的な音の話が多く、リスナーから「授業みたい」とコメントが相次いだ。',
-  ARRAY['音楽紹介', 'プレイリスト', 'ポストクラシカル', 'ケルト音楽', 'シティポップ', '未知との遭遇'],
+  ARRAY['gaming', 'music_production'],
   ARRAY['未知との遭遇'],
   ARRAY[]::TEXT[],
   '（サンプル字幕テキスト）はい、今夜は未知との遭遇回です。最近ね、めちゃくちゃ聴いてる曲があって。ジャンルばらばらなんですけど、10曲に絞ってきました。まず1曲目なんですけど、これはポストクラシカルというか、ピアノと弦楽器の曲で。',
@@ -69,6 +84,44 @@ INSERT INTO streams (
   'v1',
   false
 );
+
+DO $$
+DECLARE
+  invalid_tags text[];
+BEGIN
+  SELECT array_agg(DISTINCT candidate.tag ORDER BY candidate.tag)
+  INTO invalid_tags
+  FROM tag_guard_seed_streams seed_stream
+  CROSS JOIN LATERAL unnest(coalesce(seed_stream.tags, '{}'::text[])) AS candidate(tag)
+  LEFT JOIN tag_vocabulary vocabulary
+    ON vocabulary.slug = candidate.tag
+   AND vocabulary.is_active = true
+  WHERE vocabulary.slug IS NULL;
+
+  IF cardinality(coalesce(invalid_tags, '{}'::text[])) > 0 THEN
+    RAISE EXCEPTION 'seed contains invalid/inactive stream tags: %', invalid_tags;
+  END IF;
+END
+$$;
+
+INSERT INTO streams (
+  video_id, title, stream_date, duration_min,
+  view_count, comment_count,
+  summary, tags, corner_names, guests,
+  transcript,
+  youtube_url, thumbnail_url,
+  status, ai_model, ai_prompt_ver, is_reviewed
+)
+SELECT
+  video_id, title, stream_date, duration_min,
+  view_count, comment_count,
+  summary, tags, corner_names, guests,
+  transcript,
+  youtube_url, thumbnail_url,
+  status, ai_model, ai_prompt_ver, is_reviewed
+FROM tag_guard_seed_streams;
+
+DROP TABLE tag_guard_seed_streams;
 
 -- ============================================================
 -- Sample chapters
@@ -118,3 +171,5 @@ UNION ALL
 SELECT id, 'hash_user_c', 4 FROM s2
 UNION ALL
 SELECT id, 'hash_user_d', 5 FROM s2;
+
+COMMIT;

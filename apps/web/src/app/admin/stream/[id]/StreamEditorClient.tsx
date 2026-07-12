@@ -3,6 +3,10 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import {
+  getSelectableAdminTags,
+  type AdminTagVocabularyEntry,
+} from '@/lib/admin-tag-vocabulary'
 import type { Highlight } from '@/lib/types'
 import type {
   AdminChapter,
@@ -14,6 +18,7 @@ import {
   enqueueJob,
   fetchAdminChapters,
   fetchAdminStream,
+  fetchAdminTagVocabulary,
   saveAdminChapters,
   scrutinizeStreamSummary,
   updateAdminStream,
@@ -26,6 +31,7 @@ type Props = {
 type FormState = {
   summary: string
   selectedTags: string[]
+  cornerNames: string[]
   guests: string
   songs: string
   hasLiveSinging: boolean
@@ -45,7 +51,6 @@ type EditableChapter = {
 }
 
 const LEGACY_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
-const PRESET_TAGS = [...LEGACY_CORNER_NAMES, '雑談', '告知', '制作裏話', '新曲', 'ファン参加']
 const HIGHLIGHT_REASONS: Highlight['reason'][] = ['笑い', '名言', '感動', '驚き', '神回']
 const SCRUTINY_CATEGORY_LABELS: Record<string, string> = {
   song: '曲名',
@@ -79,17 +84,10 @@ function formatScrutinyCategory(category: string) {
 }
 
 function toFormState(stream: AdminEditableStream): FormState {
-  const seen = new Set<string>()
-  const selectedTags: string[] = []
-  for (const t of [...(stream.tags ?? []), ...(stream.corner_names ?? [])]) {
-    if (!seen.has(t)) {
-      seen.add(t)
-      selectedTags.push(t)
-    }
-  }
   return {
     summary: stream.summary ?? '',
-    selectedTags,
+    selectedTags: [...(stream.tags ?? [])],
+    cornerNames: [...(stream.corner_names ?? [])],
     guests: toCsv(stream.guests),
     songs: toCsv(stream.songs),
     hasLiveSinging: Boolean(stream.has_live_singing),
@@ -166,8 +164,8 @@ export default function StreamEditorClient({ videoId }: Props) {
   const router = useRouter()
   const [stream, setStream] = useState<AdminEditableStream | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
+  const [tagVocabulary, setTagVocabulary] = useState<AdminTagVocabularyEntry[]>([])
   const [chapters, setChapters] = useState<EditableChapter[]>([])
-  const [freeTagInput, setFreeTagInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [pageError, setPageError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
@@ -204,9 +202,10 @@ export default function StreamEditorClient({ videoId }: Props) {
       setChapterError('')
 
       try {
-        const [streamResult, chapterResult] = await Promise.allSettled([
+        const [streamResult, chapterResult, vocabularyResult] = await Promise.allSettled([
           fetchAdminStream(videoId),
           fetchAdminChapters(videoId),
+          fetchAdminTagVocabulary(),
         ])
 
         if (!active) {
@@ -227,6 +226,13 @@ export default function StreamEditorClient({ videoId }: Props) {
 
         setStream(data)
         setForm(toFormState(data))
+
+        if (vocabularyResult.status === 'fulfilled') {
+          setTagVocabulary(vocabularyResult.value)
+        } else {
+          setTagVocabulary([])
+          setPageError('タグ語彙の取得に失敗したため、新しいタグは選択できません。')
+        }
 
         if (chapterResult.status === 'fulfilled') {
           setChapters(chapterResult.value.map(toEditableChapter))
@@ -257,19 +263,20 @@ export default function StreamEditorClient({ videoId }: Props) {
     setForm({
       ...form,
       selectedTags: nextTags,
-      hasLiveViewing: nextTags.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
     })
   }
 
-  function addFreeTag() {
+  function toggleCornerName(cornerName: string) {
     if (!form) return
-    const value = freeTagInput.trim()
-    if (!value || form.selectedTags.includes(value)) {
-      setFreeTagInput('')
-      return
-    }
-    setForm({ ...form, selectedTags: [...form.selectedTags, value] })
-    setFreeTagInput('')
+    const exists = form.cornerNames.includes(cornerName)
+    const nextCornerNames = exists
+      ? form.cornerNames.filter((name) => name !== cornerName)
+      : [...form.cornerNames, cornerName]
+    setForm({
+      ...form,
+      cornerNames: nextCornerNames,
+      hasLiveViewing: nextCornerNames.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
+    })
   }
 
   function updateHighlight(index: number, nextValue: Highlight) {
@@ -332,8 +339,8 @@ export default function StreamEditorClient({ videoId }: Props) {
     const payload: UpdateAdminStreamInput = {
       videoId,
       summary: form.summary,
-      tags: form.selectedTags.join(', '),
-      cornerNames: form.selectedTags.filter((tag) => LEGACY_CORNER_NAMES.includes(tag)).join(', '),
+      tags: form.selectedTags,
+      cornerNames: form.cornerNames.join(', '),
       guests: form.guests,
       songs: form.songs,
       hasLiveSinging: form.hasLiveSinging,
@@ -344,7 +351,8 @@ export default function StreamEditorClient({ videoId }: Props) {
     }
 
     try {
-      const updated = await updateAdminStream(payload)
+      const result = await updateAdminStream(payload)
+      const updated = result.stream
       setStream(updated)
       setForm(toFormState(updated))
       if (returnToList) {
@@ -352,9 +360,13 @@ export default function StreamEditorClient({ videoId }: Props) {
         router.refresh()
         return
       }
-      setSaveMessage('保存しました。')
-    } catch {
-      setPageError('保存に失敗しました。')
+      setSaveMessage(
+        result.droppedInvalidTags.length > 0
+          ? `保存しました（不正タグを除外: ${result.droppedInvalidTags.join(', ')}）。`
+          : '保存しました。',
+      )
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : '保存に失敗しました。')
     } finally {
       setSaving(false)
     }
@@ -598,24 +610,24 @@ export default function StreamEditorClient({ videoId }: Props) {
               <div className="space-y-3">
                 <div className="space-y-1">
                   <p className="text-sm text-gray-300">タグ</p>
-                  <p className="text-xs text-gray-500">よく使うタグを選ぶか、下の入力欄で追加します。</p>
+                  <p className="text-xs text-gray-500">有効な統制語彙から選択します。既存の無効タグは保存時に除外されます。</p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {PRESET_TAGS.map((tag) => {
-                    const selected = form.selectedTags.includes(tag)
+                  {getSelectableAdminTags(tagVocabulary).map((entry) => {
+                    const selected = form.selectedTags.includes(entry.slug)
                     return (
                       <button
-                        key={tag}
+                        key={entry.slug}
                         type="button"
-                        onClick={() => toggleTag(tag)}
+                        onClick={() => toggleTag(entry.slug)}
                         className={`rounded-full border px-3 py-1 text-xs transition ${
                           selected
                             ? 'border-white bg-white text-gray-950'
                             : 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500 hover:text-white'
                         }`}
                       >
-                        {tag}
+                        {entry.label}
                       </button>
                     )
                   })}
@@ -630,32 +642,36 @@ export default function StreamEditorClient({ videoId }: Props) {
                         onClick={() => toggleTag(tag)}
                         className="rounded-full border border-indigo-700 bg-indigo-900/40 px-3 py-1 text-xs text-indigo-300 transition hover:border-indigo-500"
                       >
-                        {tag} ×
+                        {tagVocabulary.find((entry) => entry.slug === tag)?.label ?? tag} ×
                       </button>
                     ))}
                   </div>
                 )}
+              </div>
 
-                <div className="flex gap-2">
-                  <input
-                    value={freeTagInput}
-                    onChange={(event) => setFreeTagInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        addFreeTag()
-                      }
-                    }}
-                    placeholder="候補にないタグを追加"
-                    className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={addFreeTag}
-                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
-                  >
-                    追加
-                  </button>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-300">コーナー</p>
+                  <p className="text-xs text-gray-500">配信内に登場する定番コーナーを選択します。</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {LEGACY_CORNER_NAMES.map((cornerName) => {
+                    const selected = form.cornerNames.includes(cornerName)
+                    return (
+                      <button
+                        key={cornerName}
+                        type="button"
+                        onClick={() => toggleCornerName(cornerName)}
+                        className={`rounded-full border px-3 py-1 text-xs transition ${
+                          selected
+                            ? 'border-white bg-white text-gray-950'
+                            : 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500 hover:text-white'
+                        }`}
+                      >
+                        {cornerName}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 

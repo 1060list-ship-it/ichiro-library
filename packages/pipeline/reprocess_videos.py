@@ -38,7 +38,13 @@ from summarize import (
     is_gemini_resource_exhausted,
     summarize,
 )
-from store import _REVIEW_LOCKED_FIELDS, get_supabase_client, insert_chapters, save_transcript_snapshot
+from store import (
+    _REVIEW_LOCKED_FIELDS,
+    get_supabase_client,
+    insert_chapters,
+    normalize_tags,
+    save_transcript_snapshot,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -461,7 +467,7 @@ def reprocess_one(
 
     stream_update = {
         "summary":        ai_result.get("summary"),
-        "tags":           ai_result.get("tags", []),
+        "tags":           normalize_tags(supabase, ai_result.get("tags", [])),
         "corner_names":   ai_result.get("corner_names", []),
         "guests":         ai_result.get("guests", []),
         "songs":          ai_result.get("songs", []),

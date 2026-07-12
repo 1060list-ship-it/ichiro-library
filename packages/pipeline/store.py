@@ -65,20 +65,27 @@ def _load_tag_vocabulary(client: Client) -> tuple[set[str], dict[str, str]]:
     return _TAG_VOCAB_CACHE
 
 
-def normalize_tags(client: Client, raw_tags: list[str]) -> list[str]:
+def normalize_tags(client: Client, raw_tags: list[str], *, reject_invalid: bool = False) -> list[str]:
     if not raw_tags:
         return []
     if not isinstance(raw_tags, list):
+        if reject_invalid:
+            logger.warning(
+                "pipeline_tag_update_rejected rejected_tag=%s source_path=pipeline_create",
+                raw_tags,
+            )
+            raise ValueError(f"invalid tags for new stream: {raw_tags}")
         logger.warning("未知タグを破棄: %s", raw_tags)
         return []
 
     slugs, label_to_slug = _load_tag_vocabulary(client)
 
     normalized: list[str] = []
+    invalid: list[object] = []
     seen: set[str] = set()
     for tag in raw_tags:
         if not isinstance(tag, str):
-            logger.warning("未知タグを破棄: %s", tag)
+            invalid.append(tag)
             continue
 
         if tag in slugs:
@@ -86,13 +93,24 @@ def normalize_tags(client: Client, raw_tags: list[str]) -> list[str]:
         elif tag in label_to_slug:
             slug = label_to_slug[tag]
         else:
-            logger.warning("未知タグを破棄: %s", tag)
+            invalid.append(tag)
             continue
 
         if slug in seen:
             continue
         seen.add(slug)
         normalized.append(slug)
+
+    if invalid and reject_invalid:
+        for tag in invalid:
+            logger.warning(
+                "pipeline_tag_update_rejected rejected_tag=%s source_path=pipeline_create",
+                tag,
+            )
+        raise ValueError(f"invalid tags for new stream: {invalid}")
+
+    for tag in invalid:
+        logger.warning("未知タグを破棄: %s", tag)
 
     return normalized
 
@@ -157,7 +175,11 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
 
     if ai_result:
         row["summary"]      = ai_result.get("summary")
-        row["tags"]         = normalize_tags(client, ai_result.get("tags", []))
+        row["tags"]         = normalize_tags(
+            client,
+            ai_result.get("tags", []),
+            reject_invalid=existing is None,
+        )
         row["corner_names"] = ai_result.get("corner_names", [])
         row["guests"]       = ai_result.get("guests", [])
         row["songs"]           = ai_result.get("songs", [])

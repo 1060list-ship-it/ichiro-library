@@ -12,6 +12,31 @@ from store import _REVIEW_LOCKED_FIELDS
 import reprocess_videos
 
 
+def test_video_force_normalizes_tags_against_active_vocabulary(monkeypatch, fake_supabase):
+    row = make_stream_row(is_reviewed=False, tags=["relationships"])
+    fake_supabase.seed("streams", row)
+    fake_supabase.seed(
+        "tag_vocabulary",
+        {"slug": "music_production", "label": "音楽制作", "is_active": True},
+        {"slug": "relationships", "label": "人間関係", "is_active": False},
+    )
+
+    ai_result = make_ai_result(tags=["relationships", "音楽制作", "unknown_tag"])
+    monkeypatch.setattr(
+        reprocess_videos,
+        "get_transcript",
+        lambda video_id: TranscriptResult(text="", snippets=[], source="failed"),
+    )
+    monkeypatch.setattr(reprocess_videos, "summarize", lambda *a, **k: ai_result)
+    monkeypatch.setattr(reprocess_videos, "insert_chapters", MagicMock(return_value=1))
+
+    result = reprocess_videos.reprocess_one(fake_supabase, object(), row, dry_run=False, force=True)
+
+    assert result is True
+    stream_updates = [c for c in fake_supabase.update_calls if c["table"] == "streams"]
+    assert stream_updates[0]["payload"]["tags"] == ["music_production"]
+
+
 def test_video_force_reviewed_row_omits_review_locked_fields(monkeypatch, fake_supabase):
     row = make_stream_row(
         is_reviewed=True,

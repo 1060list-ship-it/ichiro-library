@@ -1,6 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import {
+  logAdminTagUpdateDrops,
+  resolveAdminTagUpdate,
+  type AdminTagVocabularyEntry,
+} from '@/lib/admin-tag-vocabulary'
 import { requireRole } from '@/lib/auth'
 import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -56,7 +61,7 @@ export type AdminChapter = {
 export type UpdateAdminStreamInput = {
   videoId: string
   summary: string
-  tags: string
+  tags?: string[] | null
   cornerNames: string
   guests: string
   songs: string
@@ -65,6 +70,13 @@ export type UpdateAdminStreamInput = {
   talkTopics: string
   highlights: Highlight[]
   isReviewed: boolean
+}
+
+export type UpdateAdminStreamResult = {
+  ok: true
+  stream: AdminEditableStream
+  droppedInvalidTags: string[]
+  droppedInactiveTags: string[]
 }
 
 export type SaveAdminChaptersInput = {
@@ -552,6 +564,22 @@ export async function fetchAdminStream(videoId: string): Promise<AdminEditableSt
   return fallback.data ? toEditableStreamWithoutLiveViewing(fallback.data) : null
 }
 
+export async function fetchAdminTagVocabulary(): Promise<AdminTagVocabularyEntry[]> {
+  await requireRole(['admin'])
+
+  const { data, error } = await supabaseAdmin
+    .from('tag_vocabulary')
+    .select('slug, label, is_active, sort_order')
+    .order('sort_order', { ascending: true })
+    .order('slug', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  return (data ?? []) as AdminTagVocabularyEntry[]
+}
+
 export async function fetchAdminChapters(videoId: string): Promise<AdminChapter[]> {
   await requireRole(['admin'])
 
@@ -574,12 +602,42 @@ export async function fetchAdminChapters(videoId: string): Promise<AdminChapter[
   return (data ?? []) as unknown as AdminChapter[]
 }
 
-export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<AdminEditableStream> {
+export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<UpdateAdminStreamResult> {
   await requireRole(['admin'])
+
+  const [existingStreamResult, vocabularyResult] = await Promise.all([
+    supabaseAdmin
+      .from('streams')
+      .select('tags')
+      .eq('video_id', input.videoId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('tag_vocabulary')
+      .select('slug, label, is_active, sort_order')
+      .order('sort_order', { ascending: true })
+      .order('slug', { ascending: true }),
+  ])
+
+  if (existingStreamResult.error) {
+    throw existingStreamResult.error
+  }
+  if (!existingStreamResult.data) {
+    throw new Error(`stream not found: ${input.videoId}`)
+  }
+  if (vocabularyResult.error) {
+    throw vocabularyResult.error
+  }
+
+  const tagUpdate = resolveAdminTagUpdate(
+    (existingStreamResult.data as Pick<Stream, 'tags'>).tags,
+    input.tags,
+    (vocabularyResult.data ?? []) as AdminTagVocabularyEntry[],
+  )
+
+  logAdminTagUpdateDrops(tagUpdate, input.videoId)
 
   const updates: AdminStreamUpdate = {
     summary: input.summary.trim() || null,
-    tags: normalizeCsv(input.tags),
     corner_names: normalizeCsv(input.cornerNames),
     guests: normalizeCsv(input.guests),
     songs: normalizeCsv(input.songs),
@@ -588,6 +646,9 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
     has_live_viewing: input.hasLiveViewing,
     talk_topics: normalizeCsv(input.talkTopics),
     is_reviewed: input.isReviewed,
+  }
+  if (tagUpdate.shouldUpdate) {
+    updates.tags = tagUpdate.storageValue ?? null
   }
 
   const withLiveViewing = await supabaseAdmin
@@ -625,7 +686,12 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
   revalidatePath(`/admin/stream/${input.videoId}`)
   revalidatePath(`/stream/${input.videoId}`)
 
-  return data
+  return {
+    ok: true,
+    stream: data,
+    droppedInvalidTags: tagUpdate.droppedInvalidTags,
+    droppedInactiveTags: tagUpdate.droppedInactiveTags,
+  }
 }
 
 export async function saveAdminChapters(input: SaveAdminChaptersInput): Promise<void> {

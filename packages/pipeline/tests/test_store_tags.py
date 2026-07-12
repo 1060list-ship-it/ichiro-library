@@ -141,6 +141,44 @@ def test_normalize_tags_drops_non_string_elements(fake_supabase, caplog):
     assert "未知タグを破棄: 123" in caplog.text
 
 
+def test_new_stream_create_hard_rejects_invalid_tags_before_upsert(fake_supabase, caplog):
+    _seed_tag_vocabulary(fake_supabase)
+    video_meta = {
+        "video_id": "new-video",
+        "title": "new stream",
+        "stream_date": "2026-07-12",
+    }
+    ai_result = {
+        "summary": "summary",
+        "tags": ["music_production", "unknown_tag"],
+    }
+
+    with caplog.at_level("WARNING"), pytest.raises(ValueError, match="invalid tags for new stream"):
+        store.upsert_stream(fake_supabase, video_meta, "transcript", "youtube", ai_result)
+
+    assert fake_supabase.upsert_calls == []
+    assert "pipeline_tag_update_rejected" in caplog.text
+    assert "rejected_tag=unknown_tag" in caplog.text
+
+
+def test_new_stream_create_uses_common_tag_normalizer(fake_supabase, monkeypatch):
+    _seed_tag_vocabulary(fake_supabase)
+    monkeypatch.setattr(store, "_ai_metadata", lambda ai_result: ("model", "v4"))
+    video_meta = {
+        "video_id": "new-video",
+        "title": "new stream",
+        "stream_date": "2026-07-12",
+    }
+    ai_result = {
+        "summary": "summary",
+        "tags": ["音楽制作", "guest"],
+    }
+
+    store.upsert_stream(fake_supabase, video_meta, "transcript", "youtube", ai_result)
+
+    assert fake_supabase.upsert_calls[0]["payload"]["tags"] == ["music_production", "guest"]
+
+
 def test_normalize_tags_uses_cached_vocabulary_within_process(fake_supabase):
     _seed_tag_vocabulary(fake_supabase)
 
