@@ -232,7 +232,7 @@ $$;
 - `song_id`が紐づく場合のみ、`songs`のalbum/track_no/disc_no/released_at情報を追加表示。存在するフィールドのみ表示し、全て空ならメタセクション自体を非表示にする
 - 表示優先ルール：見出し・本文は常に`entity.name`/`entity.description`を正とする。`songs.title`はメタ情報としてのみ表示し、両者の食い違いは許容する（同期処理は行わない）
 - 新規作成時、UIは`entity.name`の初期値に`songs.title`をコピーする（編集は自由）
-- 自動リンク（`linkifyBody`/`linkifyEntities`）は既存経路をそのまま使用、コード変更不要
+- 自動リンクの**マッチ経路**（`linkifyBody`/`linkifyEntities`の走査ロジック）は既存のまま流用する。ただし**G1対応として、`linkifyEntities`内の表示テキスト変換（`＊`始まりaliasを`「」`囲みに変換）のみ追加変更する**（詳細は§4.2・§6）
 
 ### 4.5 データフロー・ライフサイクル
 
