@@ -53,14 +53,23 @@ BEGIN
     RETURN jsonb_build_object('total', 0, 'top', '[]'::jsonb);
   END IF;
 
-  SELECT count(*) INTO v_total
-  FROM streams s
-  WHERE EXISTS (
-    SELECT 1 FROM unnest(v_aliases) alias
-    WHERE coalesce(s.summary, '') ILIKE '%' || alias || '%'
-       OR coalesce(s.transcript, '') ILIKE '%' || alias || '%'
-       OR coalesce(s.highlights::text, '') ILIKE '%' || alias || '%'
-  );
+  SELECT (
+    SELECT count(*)
+    FROM streams s
+    WHERE EXISTS (
+      SELECT 1 FROM unnest(v_aliases) alias
+      WHERE coalesce(s.summary, '') ILIKE '%' || alias || '%'
+         OR coalesce(s.transcript, '') ILIKE '%' || alias || '%'
+         OR coalesce(s.highlights::text, '') ILIKE '%' || alias || '%'
+    )
+  ) + (
+    SELECT count(*)
+    FROM magazines m
+    WHERE EXISTS (
+      SELECT 1 FROM unnest(v_aliases) alias
+      WHERE m.content::text ILIKE '%' || alias || '%'
+    )
+  ) INTO v_total;
 
   SELECT jsonb_agg(jsonb_build_object(
     'stream_id', t.id,
