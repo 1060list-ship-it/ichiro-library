@@ -50,7 +50,7 @@
 ### 4.1 DBスキーマ変更
 
 - `entities.category`に新値`'song'`を追加（運用ルールのみ、CHECK制約自体は値のenum化はしない）
-- `entities`に`song_id UUID REFERENCES songs(id) ON DELETE RESTRICT`を追加。UNIQUE制約（1曲1entity）
+- `entities`に`song_id UUID REFERENCES songs(id) ON DELETE RESTRICT`を追加。**UNIQUE制約を追加し、制約名を`entities_song_id_key`に固定する**（1曲1entity。この制約名は`create_song_entity`の`unique_violation`判別が参照する契約であり、任意のmigration側命名にしない）
 - CHECK制約を追加：
 
   ```sql
