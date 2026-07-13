@@ -739,6 +739,16 @@ export async function saveAdminChapters(input: SaveAdminChaptersInput): Promise<
 
 // ── Entity management ────────────────────────────────────────────────────────
 
+export type AdminEntitySong = {
+  id: string
+  title: string
+  album: string | null
+  disc_no: number | null
+  track_no: number | null
+  released_at: string | null
+  notes: string | null
+}
+
 export type AdminEntity = {
   id: string
   slug: string
@@ -750,6 +760,8 @@ export type AdminEntity = {
   related_work: string | null
   external_url: string | null
   sort_order: number | null
+  song_id: string | null
+  songs: AdminEntitySong | null
   created_at: string
   updated_at: string
 }
