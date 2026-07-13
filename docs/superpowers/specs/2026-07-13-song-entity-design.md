@@ -8,7 +8,7 @@
 
 - 配信で話題になった特定の楽曲（例:「怪獣」「夜の踊り子」）だけを厳選してentityとして登録できるようにする
 - 既存のentitiesナレッジベース（人物・チーム・製品向け）の仕組みをそのまま流用し、配信・マガジン本文からの自動リンクも既存経路で機能させる
-- `entities`は配信でリンクさせたい曲の厳選登録、`songs`は曲メタ（album/track等）の保持先として参照する、という役割分担にする。現行のGemini曲カタログ注入は静的ファイル（`song_catalog.txt`）経由でDBの`songs`を実行時に読まないため、entity導線での`songs`追加がGemini注入内容に波及する経路は存在しない（静的ファイルの陳腐化・正本問題は本機能のスコープ外、§7参照）
+- `entities`は配信でリンクさせたい曲の厳選登録、`songs`は曲メタ（album/track等）の保持先として参照する、という役割分担にする。現行のGemini曲カタログ注入は静的ファイル（`song_catalog.txt`）経由でDBの`songs`を実行時に読まないため、entity導線での`songs`追加がGemini注入内容に波及する経路は存在しない（静的ファイルの陳腐化・正本問題は本機能のスコープ外、§5・§8参照）
 
 ## 2. 現状（調査済み）
 
@@ -152,6 +152,8 @@ BEGIN
     RETURNING id INTO v_song_id;
   END IF;
 
+  DECLARE
+    v_constraint_name TEXT;
   BEGIN
     INSERT INTO entities (slug, name, match_names, category, description, related_work, external_url, song_id)
     VALUES (p_entity_slug, p_entity_name, p_entity_match_names, 'song', p_entity_description, p_entity_related_work, p_entity_external_url, v_song_id)
@@ -159,7 +161,9 @@ BEGIN
   EXCEPTION
     WHEN unique_violation THEN
       -- song_id の UNIQUE 違反(既にentity化済み)か slug の UNIQUE 違反かを制約名で判別
-      IF SQLERRM LIKE '%entities_song_id_key%' THEN
+      -- 文字列一致(SQLERRM LIKE)ではなくGET STACKED DIAGNOSTICSで制約名を取得する
+      GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;
+      IF v_constraint_name = 'entities_song_id_key' THEN
         RAISE EXCEPTION 'song_already_has_entity' USING ERRCODE = 'P0001';
       ELSE
         RAISE EXCEPTION 'slug_already_exists' USING ERRCODE = 'P0001';
@@ -281,7 +285,6 @@ $$;
 - 公開ページの空状態UI（song_idなし／song側メタが全欄null、の両方でレンダリングが崩れないこと）
 - song検索・マッチプレビュー用の新規APIエンドポイント（またはServer Action）の実装
 - `create_song_entity` RPC内に`p_entity_match_names`の3文字以上必須バリデーションを実装（§4.2記載の通りUI・RPC両方でチェックする）
-- `unique_violation`時の制約判別は`SQLERRM LIKE`ではなく`GET STACKED DIAGNOSTICS ... = CONSTRAINT_NAME`で行う（文字列依存を避ける）
 - 全期間マッチプレビューのSQL集計クエリがタイムアウトする規模になった場合の非同期化検討（現状のstream件数では同期SQL集計で十分と判断、将来の増加時に再検討）
 - `linkifyEntities`（`apps/web/src/lib/linkify.tsx`）内で、マッチしたaliasが`＊`始まりの場合、表示テキストを`＊`除去＋`「」`囲みに変換する処理を実装（リンク先`href`は変更しない）
 - 実装完了条件として、`＊`を含むmatch_namesを持つentityを1件作成し、対応するsummaryに同一表記を書いたstreamで実際にリンクが生成され、表示が`「」`に変換されることを確認する
