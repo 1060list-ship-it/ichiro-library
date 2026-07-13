@@ -1,6 +1,6 @@
-# 楽曲entity登録機能 設計（第3版・kana 2回目クリティカルレビュー反映）
+# 楽曲entity登録機能 設計（第4版・kana 3回目クリティカルレビュー反映）
 
-作成: 2026-07-13 / レビュー: kana クリティカルレビュー 1〜2回目（2026-07-13, Grok経由）
+作成: 2026-07-13 / レビュー: kana クリティカルレビュー 1〜3回目（2026-07-13, Grok経由）
 
 ---
 
@@ -89,6 +89,8 @@
 
   4. **マッチプレビュー（保存前必須）**：
      - 対象コーパス：全期間の全stream（`transcript`本文・`highlights`・`summary`）およびmagazine本文。直近N件ではなく**全期間**を対象とする（過去に話題になった配信を後から登録する運用が主目的のため、直近絞り込みには意味がない）
+     - **マッチロジックは本番の`find_entity_ids()`と完全同一のもの**（`match_names`・3文字以上・部分文字列一致）を使う。プレビュー専用の別ロジックは作らない（プレビューと本番でヒット結果がズレることを防ぐため）
+     - 実行方式：Node側でテキストを走査するのではなく、DB側の`ilike`/`position()`ベースのSQL集計で件数・該当箇所を取得しServer Action内で同期実行する。全期間走査でもDBクエリで完結させ、タイムアウトが問題になった場合の非同期化検討は§6の申し送り事項とする
      - 表示内容：ヒット総数、および上位5件のヒット箇所（stream名・配信日・該当抜粋へのリンク）
      - 保存ゲート：
        - ヒット0件 → 保存可能。ただし「ヒットが0件です。今後の配信のために先行登録しますか？」の確認チェックボックスを必須表示
@@ -178,6 +180,43 @@ $$;
 | song entityの削除 | 既存のentity delete Server Action | 既存のentity admin権限チェックをそのまま利用（削除後の`songs`扱いは§4.5） |
 | `songs`への直接INSERT/UPDATE/DELETE | なし | クライアントからの直接操作は禁止のまま維持（既存方針を継続） |
 
+#### `update_song_meta` RPC契約
+
+```sql
+CREATE FUNCTION update_song_meta(
+  p_song_id      UUID,
+  p_title        TEXT,
+  p_album        TEXT,
+  p_disc_no      INTEGER,
+  p_track_no     INTEGER,
+  p_released_at  DATE,
+  p_notes        TEXT
+) RETURNS VOID
+SECURITY DEFINER
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE songs
+  SET title = p_title,
+      album = p_album,
+      disc_no = p_disc_no,
+      track_no = p_track_no,
+      released_at = p_released_at,
+      notes = p_notes
+  WHERE id = p_song_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'song_not_found' USING ERRCODE = 'P0001';
+  END IF;
+END;
+$$;
+```
+
+- 更新可能列：`title` / `album` / `disc_no` / `track_no` / `released_at` / `notes`
+- **更新不可列：`is_prompt_source`**（Gemini注入対象への昇格は§4.1で明記の通り本機能のスコープ外。専用の別操作でのみ変更する）
+- entity紐付きの有無に関わらず`song_id`が存在すれば更新可能（呼び出し口はentity編集画面のみのため、実質的にはentity化済みのsongが対象になる）
+- エラー種別：`song_not_found`（該当`song_id`が存在しない場合）
+- 呼び出し経路・権限は上表の通り、Server Action入口でのadmin認証必須＋クライアントからの直接呼び出し不可
+
 ### 4.4 公開ページでの表示
 
 - `/entity/[slug]`は既存のentity詳細表示（name/description/related_work/external_url等）をそのまま流用
@@ -236,6 +275,9 @@ $$;
 - `/entity/[slug]`のqueryに`songs` joinを追加
 - 公開ページの空状態UI（song_idなし／song側メタが全欄null、の両方でレンダリングが崩れないこと）
 - song検索・マッチプレビュー用の新規APIエンドポイント（またはServer Action）の実装
+- `create_song_entity` RPC内に`p_entity_match_names`の3文字以上必須バリデーションを実装（§4.2記載の通りUI・RPC両方でチェックする）
+- `unique_violation`時の制約判別は`SQLERRM LIKE`ではなく`GET STACKED DIAGNOSTICS ... = CONSTRAINT_NAME`で行う（文字列依存を避ける）
+- 全期間マッチプレビューのSQL集計クエリがタイムアウトする規模になった場合の非同期化検討（現状のstream件数では同期SQL集計で十分と判断、将来の増加時に再検討）
 
 ## 7. 将来の拡張に対する備え
 
