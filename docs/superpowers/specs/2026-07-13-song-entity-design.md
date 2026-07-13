@@ -8,14 +8,14 @@
 
 - 配信で話題になった特定の楽曲（例:「怪獣」「夜の踊り子」）だけを厳選してentityとして登録できるようにする
 - 既存のentitiesナレッジベース（人物・チーム・製品向け）の仕組みをそのまま流用し、配信・マガジン本文からの自動リンクも既存経路で機能させる
-- 全曲を機械的に網羅する`songs`マスター（Gemini プロンプト注入用）とは目的が異なるため、両者を汚染しない形で連携させる
+- `entities`は配信でリンクさせたい曲の厳選登録、`songs`は曲メタ（album/track等）の保持先として参照する、という役割分担にする。現行のGemini曲カタログ注入は静的ファイル（`song_catalog.txt`）経由でDBの`songs`を実行時に読まないため、entity導線での`songs`追加がGemini注入内容に波及する経路は存在しない（静的ファイルの陳腐化・正本問題は本機能のスコープ外、§7参照）
 
 ## 2. 現状（調査済み）
 
 | 項目 | 内容 |
 |---|---|
 | `entities`テーブル | 人物・チーム・製品向けナレッジベース。`category`列（family/celebrity/remixer/team/craftsman/product/project）、CHECK制約なし |
-| `songs`テーブル | Geminiプロンプト注入用マスターデータのみ（title/album/disc_no/track_no/released_at/notes）。カテゴリ列なし、管理UI皆無、service_role経由のみ操作可 |
+| `songs`テーブル | 曲メタデータ（title/album/disc_no/track_no/released_at/notes）。カテゴリ列なし、管理UI皆無、service_role経由のみ操作可。**Geminiへの曲カタログ注入は実行時にこのテーブルを一切クエリせず、`packages/pipeline/prompts/song_catalog.txt`という静的ファイル（`013_songs.sql`から過去に一度手動生成、自動更新なし）のみを参照する**。データ投入はこれまでmigration（013/014）中心で、本機能によりentity経由のadmin RPC書き込みが新たに加わる |
 | 自動リンク機構 | `packages/pipeline/extract_entities.py`の`find_entity_ids()`。`entities.match_names`（3文字以上のエイリアス）による単純部分文字列一致、category非依存。3経路（`store.py`取り込み時／`weekly_magazine.py`生成時／`extract_entities.py`単体backfill）が同一ロジックを共有 |
 | 管理UI | `EntityEditorClient.tsx`にcategory選択select（7種）実装済み。楽曲は選択肢に含まれない |
 | `songs`実データ | 95件。アルバム単位で構造化（例:「夜の踊り子」は`sakanaction`アルバムtrack4として既存）。`created_by`列なし、`songs_read`ポリシーで全員read可、INSERT/UPDATE/DELETEはservice_roleのみ |
@@ -25,7 +25,7 @@
 
 ## 3. レビュー指摘との対応表（kana 1〜4回目＋G1再改訂、確定分のみ）
 
-2回目レビューで「反映済み」判定が出たのは G2・G4・9 のみ。G1・G3・G5・G6・G7・10は「不十分／新たな死角あり」と判定され、第3版〜第4版で仕様を確定。**G1は第4版承認後、一幾から「複合表記は違和感がある」との再指摘を受け、マーカー方式へ再改訂**（本版＝第5版）。
+2回目レビューで「反映済み」判定が出たのは G2・G4・9 のみ。G1・G3・G5・G6・G7・10は「不十分／新たな死角あり」と判定され、第3版〜第4版で仕様を確定。**G1は第4版承認後、一幾から「複合表記は違和感がある」との再指摘を受け、マーカー方式へ再改訂**（第5版）。**さらに実装計画フェーズの調査で、G2が前提としていた「Gemini汚染経路」自体が実在しないと判明し、G2を全面撤回**（本版＝第6版）。
 
 | 指摘 | 重大度 | 最終状態 |
 |---|---|---|
@@ -265,7 +265,7 @@ $$;
 
 ## 5. スコープ外（今回やらないこと）
 
-- 曲をGemini注入対象へ「昇格」させる専用UI
+- `song_catalog.txt`（Gemini曲カタログ静的ファイル）の再生成・DB参照化UI（G2撤回に伴い、本機能はこのファイルを読み書きしない）
 - backfillのUIからのワンクリック実行（運用手順としてのみ文書化）
 - `song_id`の多対多化・付け替えフロー
 - 専用の作成者・監査ログテーブル
@@ -289,3 +289,12 @@ $$;
 ## 7. 将来の拡張に対する備え
 
 - `song_id`を参照するコードパスは、公開ページ・管理画面・RPC呼び出しの3箇所に集約し、直接SQL/直接クライアントINSERTを散らばらせない。将来1曲に複数entityが必要になった場合の変更コストを局所化する
+
+## 8. 他タスクへの依存契約（G2撤回に伴う申し送り）
+
+本機能は次を前提として設計している：
+
+- Gemini曲カタログ注入経路は静的ファイル（`song_catalog.txt`）のままであり、DBの`songs`テーブルを実行時にクエリしない
+- 本機能は`is_prompt_source`相当の印を`songs`に一切付けない（§4.1でG2撤回済み）
+
+将来、`TASKS.md`「ichiro-library: 実行経路のEvidence Gate導入＋runtime-map.md新設」の対応として、Gemini注入をDB参照に切り替える、または静的ファイルをDBから再生成する変更を行う場合は、**entity経由で作成された`songs`行（本機能により新たに生まれる書き込み経路）を注入対象に含めるかどうかを先に設計してから**着手すること。「全件をそのまま注入対象にする」という安易な統合は、本specでG2として撤回した汚染リスクを再発させる。この一文を`TASKS.md`の該当タスクにも転記し、前提条件として残す。
