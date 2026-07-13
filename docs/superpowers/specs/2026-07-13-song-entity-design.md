@@ -1,6 +1,6 @@
-# 楽曲entity登録機能 設計（第5版・G1をマーカー方式へ再改訂）
+# 楽曲entity登録機能 設計（第6版・G2撤回＝is_prompt_sourceフラグ廃止）
 
-作成: 2026-07-13 / レビュー: kana クリティカルレビュー 1〜4回目＋G1マーカー案の追加レビュー2回（2026-07-13, Grok経由）
+作成: 2026-07-13 / レビュー: kana クリティカルレビュー計7回（1〜4回目＋G1マーカー案2回＋G2撤回1回、2026-07-13, Grok経由）
 
 ---
 
@@ -30,7 +30,7 @@
 | 指摘 | 重大度 | 最終状態 |
 |---|---|---|
 | G1: 短題曲名が`match_names`3文字以上制約と矛盾 | must-fix / 再確認必須 | §4.2：**複合表記案（第4版）を破棄し、`＊`マーカー方式へ再改訂**。summary直リンク経路が確認できたため「本文に出現しない文字列＝機能無効化」の懸念を解消。表示時は`＊`→`「」`変換。マガジン非保証は明記（kana 2回の追加レビューで承認、一幾承認 2026-07-13） |
-| G2: `songs`がentity導線で汚染される | must-fix / 再確認必須 | **反映済み**（変更なし） |
+| G2: `songs`がentity導線で汚染される | must-fix / 再確認必須 | §4.1：**`is_prompt_source`フラグ導入を撤回（第6版）**。実装計画フェーズの調査で、Gemini注入は静的ファイル`song_catalog.txt`のみを読みDBの`songs`を一切クエリしないことが判明したため、フラグによる汚染防止自体が不要と判明。静的ファイルの陳腐化問題は別タスク化 |
 | G3: 2段階INSERTの原子性・経路契約が未定義 | must-fix / 再確認必須 | **反映済み**。§4.3：RPC関数のシグネチャ・分岐・エラー種別を確定 |
 | G4: category/song_id不整合防止 | must-fix / 再確認必須 | **反映済み**（変更なし） |
 | G5: 部分一致誤爆リスク未評価 | must-fix / 再確認必須 | **反映済み**。§4.2：対象コーパス・閾値・保存ブロック条件、本番ロジックとの同一性、実行方式を確定 |
@@ -61,11 +61,8 @@
     );
   ```
 
-- `songs.is_prompt_source boolean NOT NULL DEFAULT false`を追加
-  - 既存の全songsレコードは移行migrationで`is_prompt_source = true`に一括更新（現行のGemini注入対象を維持するため）
-  - entity導線経由で新規作成されたsongは`false`のまま
-  - Geminiプロンプト注入クエリ（`packages/pipeline`内の該当箇所）に`WHERE is_prompt_source = true`フィルタを追加
-  - 曲を後から注入対象に「昇格」させたい場合は、別途明示的な操作（管理画面の別フラグ切り替え、または手動SQL）で対応。今回のスコープでは昇格UIは作らない
+- **`songs.is_prompt_source`フラグは導入しない（第6版で撤回）**。実装計画フェーズの調査で、Geminiへの曲カタログ注入（`packages/pipeline/summarize.py`の`_load_song_catalog_text()`）はDBの`songs`テーブルを実行時に一切クエリせず、`packages/pipeline/prompts/song_catalog.txt`という静的ファイル（`013_songs.sql`から過去に一度手動生成されコミットされたスナップショット、自動更新の仕組みなし）を読むだけであることが判明した。コードベース全体で`songs`テーブルへの実クエリ（`.from('songs')`等）は他に存在しない。したがって、entity導線経由でDBの`songs`にレコードを追加しても、Gemini側の注入内容に影響する経路が存在せず、汚染防止フラグは不要
+  - **注**: この静的ファイル自体、後から追加された`014_songs_singles.sql`（「怪獣」等のシングル曲）を反映しておらず既に陳腐化している。この問題および「DB/静的ファイルどちらを正本にするか」という根本課題は本機能のスコープ外とし、別タスク（`TASKS.md`「ichiro-library: 実行経路のEvidence Gate導入＋runtime-map.md新設」）として記録済み
 
 ### 4.2 管理画面UI
 
@@ -79,7 +76,7 @@
      - **正規化キー完全一致の候補が1件以上ある場合、その一覧を必ず表示し、ユーザーが一覧内の候補を選ぶか、または明示的に「別の曲として新規作成する」ボタンを押さない限り新規作成フォームへ進めない**（ライブ版・カバー版等の意図的な別レコード作成を許容しつつ、無自覚な重複を防ぐ）
      - `songs.title`へのUNIQUE制約は張らない（意図的な重複を許容する設計のため）
 
-  2. **新規作成（候補から選ばない場合）**：title/album/disc_no/track_no/released_at/notesのフォーム。保存時`is_prompt_source=false`で作成（§4.3のRPC経由）
+  2. **新規作成（候補から選ばない場合）**：title/album/disc_no/track_no/released_at/notesのフォーム。§4.3のRPC経由で作成
 
   3. **match_names必須バリデーション＋短題マーカー方式（マッチ方針の確定・第5版で改訂）**：
      - `match_names`配列は3文字以上の文字列を最低1件含まないと保存不可（UI・RPC両方でチェック）
@@ -150,8 +147,8 @@ BEGIN
     IF p_song_title IS NULL THEN
       RAISE EXCEPTION 'song_title_required' USING ERRCODE = 'P0001';
     END IF;
-    INSERT INTO songs (title, album, disc_no, track_no, released_at, notes, is_prompt_source)
-    VALUES (p_song_title, p_song_album, p_song_disc_no, p_song_track_no, p_song_released_at, p_song_notes, false)
+    INSERT INTO songs (title, album, disc_no, track_no, released_at, notes)
+    VALUES (p_song_title, p_song_album, p_song_disc_no, p_song_track_no, p_song_released_at, p_song_notes)
     RETURNING id INTO v_song_id;
   END IF;
 
@@ -220,8 +217,7 @@ END;
 $$;
 ```
 
-- 更新可能列：`title` / `album` / `disc_no` / `track_no` / `released_at` / `notes`
-- **更新不可列：`is_prompt_source`**（Gemini注入対象への昇格は§4.1で明記の通り本機能のスコープ外。専用の別操作でのみ変更する）
+- 更新可能列：`title` / `album` / `disc_no` / `track_no` / `released_at` / `notes`（`songs`テーブルの全列。フラグ列は存在しない、§4.1参照）
 - entity紐付きの有無に関わらず`song_id`が存在すれば更新可能（呼び出し口はentity編集画面のみのため、実質的にはentity化済みのsongが対象になる）
 - エラー種別：`song_not_found`（該当`song_id`が存在しない場合）
 - 呼び出し経路・権限は上表の通り、Server Action入口でのadmin認証必須＋クライアントからの直接呼び出し不可
@@ -252,7 +248,7 @@ $$;
 - `song_id`は作成後イミュータブル。曲の紐付けを変更したい場合は既存entityを削除し、新規entityを作り直す運用とする
 - entity削除は既存のentity delete Server Actionをそのまま使用
 - **entity削除時、紐づく`songs`行は削除しない**（残す）。理由：`songs`は他entityから再利用され得るデータであり、entity側のライフサイクルに引きずられて削除すると再作成時に情報が失われるため
-- 削除後に残る「孤立song」（`is_prompt_source=false`かつどのentityからも参照されていない`songs`行）は、次回entity作成時のsong検索（§4.2の正規化キー完全一致候補）で自然に再発見・再利用される。専用の掃除UIやバッチは作らない（棚卸しは運用者の任意判断とし、Runbookにその旨を記載する）
+- 削除後に残る「孤立song」（どのentityからも参照されていない`songs`行）は、次回entity作成時のsong検索（§4.2の正規化キー完全一致候補）で自然に再発見・再利用される。専用の掃除UIやバッチは作らない（棚卸しは運用者の任意判断とし、Runbookにその旨を記載する）
 - slug衝突（同名で作り直す等）は既存entity全般と同じ挙動（手動入力必須、衝突時はUIでエラー表示）を踏襲し、本機能固有の対応は追加しない
 
 ### 4.6 エラーハンドリング
