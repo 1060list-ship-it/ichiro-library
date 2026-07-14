@@ -1402,3 +1402,93 @@ export async function previewSongMatches(matchNames: string[]): Promise<SongMatc
 
   return data as unknown as SongMatchPreviewResult
 }
+
+export type CreateSongEntityInput = {
+  songId: string | null
+  songTitle: string
+  songAlbum: string
+  songDiscNo: string
+  songTrackNo: string
+  songReleasedAt: string
+  songNotes: string
+  entitySlug: string
+  entityName: string
+  entityMatchNames: string[]
+  entityDescription: string
+  entityRelatedWork: string
+  entityExternalUrl: string
+}
+
+export type UpdateSongMetaInput = {
+  songId: string
+  title: string
+  album: string
+  discNo: string
+  trackNo: string
+  releasedAt: string
+  notes: string
+}
+
+function mapSongRpcErrorMessage(message: string): string {
+  switch (message) {
+    case 'song_not_found':
+      return '指定された楽曲が見つかりませんでした。'
+    case 'song_title_required':
+      return '新規作成時は楽曲タイトルが必須です。'
+    case 'song_already_has_entity':
+      return 'この楽曲は既にエンティティ化されています。'
+    case 'slug_already_exists':
+      return 'このスラッグは既に使用されています。'
+    case 'match_names_too_short':
+      return '3文字以上の別名キーワードを少なくとも1件登録してください。'
+    default:
+      return '保存に失敗しました。'
+  }
+}
+
+export async function createSongEntity(input: CreateSongEntityInput): Promise<{ id: string }> {
+  await requireRole(['admin'])
+  const { data, error } = await supabaseAdmin.rpc('create_song_entity', {
+    p_song_id: input.songId,
+    p_song_title: input.songId ? null : input.songTitle.trim(),
+    p_song_album: input.songAlbum.trim() || null,
+    p_song_disc_no: input.songDiscNo !== '' ? Number(input.songDiscNo) : null,
+    p_song_track_no: input.songTrackNo !== '' ? Number(input.songTrackNo) : null,
+    p_song_released_at: input.songReleasedAt || null,
+    p_song_notes: input.songNotes.trim() || null,
+    p_entity_slug: input.entitySlug.trim(),
+    p_entity_name: input.entityName.trim(),
+    p_entity_match_names: input.entityMatchNames,
+    p_entity_description: input.entityDescription.trim(),
+    p_entity_related_work: input.entityRelatedWork.trim() || null,
+    p_entity_external_url: input.entityExternalUrl.trim() || null,
+  })
+
+  if (error) {
+    throw new Error(mapSongRpcErrorMessage(error.message))
+  }
+
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
+  return { id: data as unknown as string }
+}
+
+export async function updateSongMetaAction(input: UpdateSongMetaInput): Promise<void> {
+  await requireRole(['admin'])
+  const { error } = await supabaseAdmin.rpc('update_song_meta', {
+    p_song_id: input.songId,
+    p_title: input.title.trim(),
+    p_album: input.album.trim() || null,
+    p_disc_no: input.discNo !== '' ? Number(input.discNo) : null,
+    p_track_no: input.trackNo !== '' ? Number(input.trackNo) : null,
+    p_released_at: input.releasedAt || null,
+    p_notes: input.notes.trim() || null,
+  })
+
+  if (error) {
+    throw new Error(mapSongRpcErrorMessage(error.message))
+  }
+
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
+}
