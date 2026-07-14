@@ -7,6 +7,7 @@ import {
   type AdminTagVocabularyEntry,
 } from '@/lib/admin-tag-vocabulary'
 import { requireRole } from '@/lib/auth'
+import { normalizeSongTitle } from '@/lib/song-search'
 import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { Database, Highlight, Stream } from '@/lib/types'
@@ -1355,4 +1356,34 @@ export async function removeAdminBookmark(streamId: string) {
     .eq('user_id', user.id)
     .eq('stream_id', streamId)
   if (error) throw new Error(`bookmark remove failed: ${error.message}`)
+}
+
+export type SongSearchResult = {
+  id: string
+  title: string
+  album: string | null
+  released_at: string | null
+}
+
+export async function searchSongs(query: string): Promise<{ exact: SongSearchResult[]; partial: SongSearchResult[] }> {
+  await requireRole(['admin'])
+  const trimmed = query.trim()
+  if (!trimmed) return { exact: [], partial: [] }
+
+  const { data, error } = await supabaseAdmin
+    .from('songs')
+    .select('id, title, album, released_at')
+    .ilike('title', `%${trimmed}%`)
+    .order('released_at', { ascending: false })
+    .limit(20)
+
+  if (error) throw error
+
+  const normalizedQuery = normalizeSongTitle(trimmed)
+  const results = (data ?? []) as unknown as SongSearchResult[]
+  const exact = results.filter((result) => normalizeSongTitle(result.title) === normalizedQuery)
+  const exactIds = new Set(exact.map((result) => result.id))
+  const partial = results.filter((result) => !exactIds.has(result.id))
+
+  return { exact, partial }
 }
