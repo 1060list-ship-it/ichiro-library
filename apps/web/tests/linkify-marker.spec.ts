@@ -23,7 +23,7 @@ test.describe('linkifyEntities marker display', () => {
           slug,
           name: 'マーカー表示テスト曲',
           match_names: ['＊マーカー表示テスト曲'],
-          category: 'song',
+          category: 'celebrity',
           description: 'テスト',
         })
         .select('id')
