@@ -10,7 +10,7 @@ import { requireRole } from '@/lib/auth'
 import { normalizeSongTitle } from '@/lib/song-search'
 import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { Database, Highlight, Stream } from '@/lib/types'
+import type { Database, Highlight, SongMatchPreviewResult, Stream } from '@/lib/types'
 
 
 export type AdminDashboardData = {
@@ -1389,4 +1389,16 @@ export async function searchSongs(query: string): Promise<{ exact: SongSearchRes
     .slice(0, 20)
 
   return { exact, partial }
+}
+
+export async function previewSongMatches(matchNames: string[]): Promise<SongMatchPreviewResult> {
+  await requireRole(['admin'])
+
+  const { data, error } = await supabaseAdmin.rpc('preview_song_matches', {
+    p_match_names: matchNames,
+  })
+
+  if (error) throw error
+
+  return data as unknown as SongMatchPreviewResult
 }
