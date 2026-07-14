@@ -47,6 +47,11 @@ test.describe('linkifyEntities marker display', () => {
       streamId = stream?.id
       expect(streamId).toBeTruthy()
 
+      const { error: linkError } = await service
+        .from('stream_entities')
+        .insert({ stream_id: streamId!, entity_id: entityId! })
+      expect(linkError).toBeNull()
+
       await page.goto(`/stream/${videoId}`)
       const link = page.locator(`a[href="/entity/${slug}"]`)
       await expect(link).toHaveText('「マーカー表示テスト曲」')
