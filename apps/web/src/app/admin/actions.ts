@@ -1373,17 +1373,20 @@ export async function searchSongs(query: string): Promise<{ exact: SongSearchRes
   const { data, error } = await supabaseAdmin
     .from('songs')
     .select('id, title, album, released_at')
-    .ilike('title', `%${trimmed}%`)
-    .order('released_at', { ascending: false })
-    .limit(20)
 
   if (error) throw error
 
   const normalizedQuery = normalizeSongTitle(trimmed)
-  const results = (data ?? []) as unknown as SongSearchResult[]
+  const results = ((data ?? []) as unknown as SongSearchResult[])
+    .sort((left, right) => (right.released_at ?? '').localeCompare(left.released_at ?? ''))
   const exact = results.filter((result) => normalizeSongTitle(result.title) === normalizedQuery)
   const exactIds = new Set(exact.map((result) => result.id))
-  const partial = results.filter((result) => !exactIds.has(result.id))
+  const partial = results
+    .filter((result) => (
+      !exactIds.has(result.id)
+      && normalizeSongTitle(result.title).includes(normalizedQuery)
+    ))
+    .slice(0, 20)
 
   return { exact, partial }
 }
