@@ -253,7 +253,10 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
                 onChange={e => setCategory(e.target.value)}
               >
                 {CATEGORIES
-                  .filter(c => c.value !== 'song' || !entity || entity.category === 'song')
+                  .filter(c => {
+                    if (entity?.category === 'song') return c.value === 'song'
+                    return c.value !== 'song' || !entity
+                  })
                   .map(c => (
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
@@ -423,7 +426,7 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || deleting || (category === 'song' && !entity && !previewConfirmed && !songId)}
+              disabled={saving || deleting || (category === 'song' && !entity && !previewConfirmed)}
               className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-950 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
             >
               {saving ? '保存中...' : '保存'}
