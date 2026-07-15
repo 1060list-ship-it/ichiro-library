@@ -43,11 +43,33 @@ test.describe('public entity detail page song meta', () => {
   })
 
   test('non-song entity detail page does not show album section', async ({ page }) => {
-    await page.goto('/entity')
-    // 既存の非song entityの詳細ページに「確認用アルバム」のような楽曲メタ表記が出ないことを
-    // スモークチェックする（既存entity一覧から1件開いて確認）
-    const firstLink = page.locator('a[href^="/entity/"]').first()
-    await firstLink.click()
-    await expect(page.getByText(/Album|アルバム情報/)).toHaveCount(0)
+    const service = getSupabaseServiceRoleClient()
+    const slug = `public-non-song-detail-${Date.now()}`
+    let entityId: string | undefined
+
+    try {
+      const { data: entity, error: entityError } = await service
+        .from('entities')
+        .insert({
+          slug,
+          name: '公開ページ確認人物',
+          match_names: ['公開ページ確認人物'],
+          category: 'celebrity',
+          description: 'テスト説明',
+        })
+        .select('id')
+        .single()
+      expect(entityError).toBeNull()
+      entityId = entity?.id
+      expect(entityId).toBeTruthy()
+
+      await page.goto(`/entity/${slug}`)
+      await expect(page.getByText('Album Info', { exact: true })).toHaveCount(0)
+    } finally {
+      if (entityId) {
+        const { error } = await service.from('entities').delete().eq('id', entityId)
+        expect(error).toBeNull()
+      }
+    }
   })
 })
