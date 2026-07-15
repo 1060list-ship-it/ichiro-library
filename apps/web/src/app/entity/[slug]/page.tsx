@@ -63,6 +63,7 @@ export default async function EntityDetailPage({ params }: PageProps) {
   }
 
   const entity = data as unknown as EntityDetail
+  const hasSongMeta = entity.songs && (entity.songs.album || entity.songs.disc_no || entity.songs.track_no || entity.songs.released_at)
   const relatedStreams = await fetchRelatedStreams(entity.id)
 
   return (
@@ -100,15 +101,15 @@ export default async function EntityDetailPage({ params }: PageProps) {
           </section>
         )}
 
-        {entity.category === 'song' && entity.songs && (
+        {entity.category === 'song' && hasSongMeta && (
           <section className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-2">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest">Album Info</p>
             <div className="text-sm text-gray-200 space-y-1">
-              {entity.songs.album && <p>アルバム/シングル: {entity.songs.album}</p>}
-              {(entity.songs.disc_no || entity.songs.track_no) && (
-                <p>収録: {entity.songs.disc_no ?? '-'}枚目 / {entity.songs.track_no ?? '-'}曲目</p>
+              {entity.songs?.album && <p>アルバム/シングル: {entity.songs.album}</p>}
+              {(entity.songs?.disc_no || entity.songs?.track_no) && (
+                <p>収録: {entity.songs?.disc_no ?? '-'}枚目 / {entity.songs?.track_no ?? '-'}曲目</p>
               )}
-              {entity.songs.released_at && <p>発売日: {entity.songs.released_at}</p>}
+              {entity.songs?.released_at && <p>発売日: {entity.songs.released_at}</p>}
             </div>
           </section>
         )}
