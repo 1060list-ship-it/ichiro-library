@@ -37,7 +37,7 @@ BEGIN
     FROM magazines m
     WHERE EXISTS (
       SELECT 1 FROM unnest(v_aliases) alias
-      WHERE m.content::text ILIKE '%' || alias || '%'
+      WHERE m.content::text LIKE '%' || alias || '%'
     )
   ) INTO v_total;
 
