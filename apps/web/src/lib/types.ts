@@ -160,6 +160,7 @@ export type CreateSongEntityArgs = {
   p_song_notes: string | null
   p_entity_slug: string
   p_entity_name: string
+  p_entity_role: string | null
   p_entity_match_names: string[]
   p_entity_description: string
   p_entity_related_work: string | null

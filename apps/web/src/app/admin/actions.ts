@@ -1413,6 +1413,7 @@ export type CreateSongEntityInput = {
   songNotes: string
   entitySlug: string
   entityName: string
+  entityRole: string
   entityMatchNames: string[]
   entityDescription: string
   entityRelatedWork: string
@@ -1458,6 +1459,7 @@ export async function createSongEntity(input: CreateSongEntityInput): Promise<{ 
     p_song_notes: input.songNotes.trim() || null,
     p_entity_slug: input.entitySlug.trim(),
     p_entity_name: input.entityName.trim(),
+    p_entity_role: input.entityRole.trim() || null,
     p_entity_match_names: input.entityMatchNames,
     p_entity_description: input.entityDescription.trim(),
     p_entity_related_work: input.entityRelatedWork.trim() || null,

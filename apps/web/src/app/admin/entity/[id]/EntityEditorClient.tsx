@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { AdminEntity, AdminEntityStream } from '../../actions'
 import { deleteAdminEntity, upsertAdminEntity, createSongEntity, updateSongMetaAction } from '../../actions'
 import { suggestEntityFields, type SuggestEntityResult } from '@/app/admin/actions'
@@ -67,6 +67,12 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
     notes: entity?.songs?.notes ?? '',
   })
   const [previewConfirmed, setPreviewConfirmed] = useState(false)
+
+  useEffect(() => {
+    // A changed alias list always requires a fresh match preview before saving.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPreviewConfirmed(false)
+  }, [matchNames])
 
   function addAlias() {
     const v = aliasInput.trim()
@@ -139,6 +145,7 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
           songNotes: newSongFields.notes,
           entitySlug: slug,
           entityName: name,
+          entityRole: role,
           entityMatchNames: matchNames,
           entityDescription: description,
           entityRelatedWork: relatedWork,

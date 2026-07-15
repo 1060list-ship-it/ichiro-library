@@ -39,6 +39,7 @@ test.describe('createSongEntity / updateSongMetaAction integration', () => {
           songNotes: '',
           entitySlug: slug,
           entityName: 'E2Eテスト楽曲',
+          entityRole: '',
           entityMatchNames: ['＊E2Eテスト楽曲'],
           entityDescription: 'テスト説明',
           entityRelatedWork: '',
@@ -76,6 +77,7 @@ test.describe('createSongEntity / updateSongMetaAction integration', () => {
           songNotes: '',
           entitySlug: slug,
           entityName: '短題テスト',
+          entityRole: '',
           entityMatchNames: ['短'],
           entityDescription: '',
           entityRelatedWork: '',
@@ -107,6 +109,7 @@ test.describe('createSongEntity / updateSongMetaAction integration', () => {
           songNotes: '',
           entitySlug: slug,
           entityName: 'メタ更新テスト曲',
+          entityRole: '',
           entityMatchNames: ['＊メタ更新テスト曲'],
           entityDescription: '',
           entityRelatedWork: '',
@@ -144,6 +147,44 @@ test.describe('createSongEntity / updateSongMetaAction integration', () => {
       const { data: song } = await service.from('songs').select('album, notes').eq('id', songId).single()
       expect(song?.album).toBe('新アルバム')
       expect(song?.notes).toBe('更新済み')
+    } finally {
+      await cleanupBySlug(slug)
+    }
+  })
+
+  test('persists the role when creating a new song entity', async () => {
+    const slug = uniqueSlug()
+    const entityRole = '作詞・作曲'
+    try {
+      const response = await invokeServerAction({
+        actionName: 'createSongEntity',
+        actionArgs: [{
+          songId: null,
+          songTitle: 'ロール保存テスト曲',
+          songAlbum: '',
+          songDiscNo: '',
+          songTrackNo: '',
+          songReleasedAt: '',
+          songNotes: '',
+          entitySlug: slug,
+          entityName: 'ロール保存テスト曲',
+          entityRole,
+          entityMatchNames: ['＊ロール保存テスト曲'],
+          entityDescription: '',
+          entityRelatedWork: '',
+          entityExternalUrl: '',
+        }],
+        manifestRoute: 'admin/entity/[id]',
+        pagePath: '/admin/entity/new',
+        role: 'admin',
+      })
+
+      expect(response.status).toBe(200)
+      expect(response.errorMessage).toBeNull()
+
+      const service = getSupabaseServiceRoleClient()
+      const { data } = await service.from('entities').select('role').eq('slug', slug).single()
+      expect(data?.role).toBe(entityRole)
     } finally {
       await cleanupBySlug(slug)
     }
