@@ -5,7 +5,8 @@
 INSERT INTO tag_vocabulary (slug, label, category, sort_order, is_active) VALUES
   ('music_production', '音楽制作', 'content', 10, true),
   ('guest', 'ゲスト', 'content', 20, true),
-  ('gaming', 'ゲーム', 'content', 30, true)
+  ('gaming', 'ゲーム', 'content', 30, true),
+  ('relationships', '人間関係', 'content', 40, false)
 ON CONFLICT (slug) DO UPDATE SET
   label = EXCLUDED.label,
   category = EXCLUDED.category,
