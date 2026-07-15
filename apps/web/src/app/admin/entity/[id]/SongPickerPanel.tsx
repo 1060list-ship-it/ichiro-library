@@ -67,7 +67,8 @@ export default function SongPickerPanel({
     try {
       const result = await previewSongMatches(matchNames)
       setPreview(result)
-      onPreviewConfirmedChange(false)
+      const needsConfirmationForResult = result.total === 0 || result.total > 20
+      onPreviewConfirmedChange(!needsConfirmationForResult)
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : 'プレビューに失敗しました。')
     } finally {
