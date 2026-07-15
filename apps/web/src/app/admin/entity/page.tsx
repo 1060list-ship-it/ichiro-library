@@ -12,6 +12,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   craftsman: '職人',
   product: 'コラボ製品',
   project: 'プロジェクト',
+  song: '楽曲',
 }
 
 function categoryLabel(category: string): string {

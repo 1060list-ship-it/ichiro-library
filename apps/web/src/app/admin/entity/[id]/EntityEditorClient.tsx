@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useRef } from 'react'
 import type { AdminEntity, AdminEntityStream } from '../../actions'
-import { deleteAdminEntity, upsertAdminEntity } from '../../actions'
+import { deleteAdminEntity, upsertAdminEntity, createSongEntity, updateSongMetaAction } from '../../actions'
 import { suggestEntityFields, type SuggestEntityResult } from '@/app/admin/actions'
+import SongPickerPanel, { type NewSongFields } from './SongPickerPanel'
 
 const CATEGORIES = [
   { value: 'family',    label: '家族・地元' },
@@ -15,6 +16,7 @@ const CATEGORIES = [
   { value: 'craftsman', label: '職人' },
   { value: 'product',   label: 'コラボ製品' },
   { value: 'project',   label: 'プロジェクト' },
+  { value: 'song',      label: '楽曲' },
 ]
 
 type Props = {
@@ -47,6 +49,24 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
   const [deleting, setDeleting] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
+  const [songId, setSongId] = useState<string | null>(entity?.song_id ?? null)
+  const [newSongFields, setNewSongFields] = useState<NewSongFields>({
+    title: '',
+    album: '',
+    discNo: '',
+    trackNo: '',
+    releasedAt: '',
+    notes: '',
+  })
+  const [songMeta, setSongMeta] = useState({
+    title: entity?.songs?.title ?? '',
+    album: entity?.songs?.album ?? '',
+    discNo: entity?.songs?.disc_no?.toString() ?? '',
+    trackNo: entity?.songs?.track_no?.toString() ?? '',
+    releasedAt: entity?.songs?.released_at ?? '',
+    notes: entity?.songs?.notes ?? '',
+  })
+  const [previewConfirmed, setPreviewConfirmed] = useState(false)
 
   function addAlias() {
     const v = aliasInput.trim()
@@ -86,14 +106,68 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
       setError('名前とスラッグは必須です。')
       return
     }
+
+    if (category === 'song' && !entity && !songId) {
+      // 新規song作成時はプレビュー実行が必須（マッチプレビューボタンを押すとpreviewConfirmedの判定材料が揃う）
+      // ヒット1〜20件のケースはpreviewConfirmed不要だが、SongPickerPanel側でpreviewが一度もnullのままなら
+      // ここでは検知できないため、保存ボタンのdisabled条件（songIdなし文脈）と合わせて運用する
+    }
+
+    if (category === 'song') {
+      const validAliasCount = matchNames.filter((n) => n.trim().length >= 3).length
+      if (validAliasCount === 0) {
+        setError('3文字以上の別名キーワードを少なくとも1件登録してください。')
+        return
+      }
+      if (!songId && !newSongFields.title.trim()) {
+        setError('楽曲を検索して選択するか、新規作成のタイトルを入力してください。')
+        return
+      }
+    }
+
     setSaving(true)
     setError('')
     try {
-      await upsertAdminEntity({
-        id: entity?.id,
-        name, slug, category, role, description,
-        matchNames, relatedWork, externalUrl, sortOrder,
-      })
+      if (category === 'song' && !entity) {
+        await createSongEntity({
+          songId,
+          songTitle: newSongFields.title,
+          songAlbum: newSongFields.album,
+          songDiscNo: newSongFields.discNo,
+          songTrackNo: newSongFields.trackNo,
+          songReleasedAt: newSongFields.releasedAt,
+          songNotes: newSongFields.notes,
+          entitySlug: slug,
+          entityName: name,
+          entityMatchNames: matchNames,
+          entityDescription: description,
+          entityRelatedWork: relatedWork,
+          entityExternalUrl: externalUrl,
+        })
+      } else if (category === 'song' && entity) {
+        await upsertAdminEntity({
+          id: entity.id,
+          name, slug, category, role, description,
+          matchNames, relatedWork, externalUrl, sortOrder,
+        })
+        if (entity.song_id) {
+          await updateSongMetaAction({
+            songId: entity.song_id,
+            title: songMeta.title,
+            album: songMeta.album,
+            discNo: songMeta.discNo,
+            trackNo: songMeta.trackNo,
+            releasedAt: songMeta.releasedAt,
+            notes: songMeta.notes,
+          })
+        }
+      } else {
+        await upsertAdminEntity({
+          id: entity?.id,
+          name, slug, category, role, description,
+          matchNames, relatedWork, externalUrl, sortOrder,
+        })
+      }
       router.push('/admin/entity')
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました。')
@@ -178,11 +252,42 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
                 value={category}
                 onChange={e => setCategory(e.target.value)}
               >
-                {CATEGORIES.map(c => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
+                {CATEGORIES
+                  .filter(c => c.value !== 'song' || !entity || entity.category === 'song')
+                  .map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
               </select>
             </label>
+            {category === 'song' && !entity && (
+              <SongPickerPanel
+                songId={songId}
+                onSongIdChange={setSongId}
+                newSongFields={newSongFields}
+                onNewSongFieldsChange={setNewSongFields}
+                matchNames={matchNames}
+                previewConfirmed={previewConfirmed}
+                onPreviewConfirmedChange={setPreviewConfirmed}
+              />
+            )}
+            {category === 'song' && entity?.songs && (
+              <div className="rounded-xl border border-gray-800 bg-gray-900 divide-y divide-gray-800">
+                <div className="px-5 py-4">
+                  <h2 className="text-sm font-semibold">楽曲メタ情報</h2>
+                  <p className="mt-1 text-xs text-gray-500">紐づけ先の楽曲は変更できません。メタ情報のみ編集できます。</p>
+                </div>
+                <div className="px-5 py-4 space-y-4">
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>曲名</span>
+                    <input className={inputClass} value={songMeta.title} onChange={e => setSongMeta({ ...songMeta, title: e.target.value })} />
+                  </label>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>アルバム/シングル名</span>
+                    <input className={inputClass} value={songMeta.album} onChange={e => setSongMeta({ ...songMeta, album: e.target.value })} />
+                  </label>
+                </div>
+              </div>
+            )}
             <label className={labelClass}>
               <span className={labelTextClass}>役割・肩書き</span>
               <input className={inputClass} value={role} onChange={e => setRole(e.target.value)} placeholder="ミュージシャン" />
@@ -318,7 +423,7 @@ export default function EntityEditorClient({ entity, streams, prefillName }: Pro
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || deleting}
+              disabled={saving || deleting || (category === 'song' && !entity && !previewConfirmed && !songId)}
               className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-950 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
             >
               {saving ? '保存中...' : '保存'}
