@@ -60,6 +60,17 @@ ORDER BY s.stream_date DESC, c.sort_order;
 SELECT title, avg_rating, rating_count FROM streams ORDER BY avg_rating DESC;
 ```
 
+### 6. ローカルDBリセットと認証フィクスチャ
+
+テスト用のadmin/editor認証ユーザーを含めてローカルDBを再構築する場合は、必ず以下を実行する。
+
+```bash
+cd apps/web
+npm run db:reset
+```
+
+このコマンドはローカルDBだけをresetし、`.env.local` または `.env.test` の `TEST_ADMIN_*` / `TEST_EDITOR_*` を使ってAuthユーザーとロールを復元し、ログインまで検証する。生の `supabase db reset` は認証フィクスチャを復元しないため、E2Eセットアップには使用しない。
+
 ## ファイル構成
 
 ```

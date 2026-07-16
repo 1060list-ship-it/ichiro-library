@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -47,6 +48,57 @@ function assertLocalSupabaseUrl(url) {
   if (!['127.0.0.1', 'localhost', '::1'].includes(hostname)) {
     throw new Error('Refusing to seed test users into a non-local Supabase project.')
   }
+}
+
+function readEnvText(content) {
+  const values = {}
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue
+    }
+
+    const separatorIndex = trimmed.indexOf('=')
+    if (separatorIndex === -1) {
+      continue
+    }
+
+    let value = trimmed.slice(separatorIndex + 1).trim()
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1)
+    }
+    values[trimmed.slice(0, separatorIndex).trim()] = value
+  }
+
+  return values
+}
+
+function readLocalSupabaseConfig() {
+  const projectDir = path.resolve(appDir, '..', '..')
+  let output
+
+  try {
+    output = execFileSync(
+      'supabase',
+      ['--workdir', projectDir, 'status', '--output', 'env'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+  } catch {
+    throw new Error('Unable to read local Supabase status. Start the local Supabase stack first.')
+  }
+
+  const values = readEnvText(output)
+  const supabaseUrl = values.API_URL
+  const anonKey = values.ANON_KEY
+  const serviceRoleKey = values.SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    throw new Error('Local Supabase status did not provide API_URL, ANON_KEY, and SERVICE_ROLE_KEY.')
+  }
+
+  assertLocalSupabaseUrl(supabaseUrl)
+  return { supabaseUrl, anonKey, serviceRoleKey }
 }
 
 async function findUserByEmail(supabase, email) {
@@ -103,31 +155,43 @@ async function upsertTestUser(supabase, { role, email, password }) {
   return existing ? 'updated' : 'created'
 }
 
+async function verifyTestUserLogin(supabaseUrl, anonKey, { role, email, password }) {
+  const supabase = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+  if (error || data.user?.email?.toLowerCase() !== email.toLowerCase()) {
+    throw new Error(`Unable to verify ${role} test user login: ${error?.message ?? 'unknown error'}`)
+  }
+}
+
 async function main() {
   loadEnvFile(path.join(appDir, '.env.local'), false)
   loadEnvFile(path.join(appDir, '.env.test'), true)
 
-  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
-  assertLocalSupabaseUrl(supabaseUrl)
-
-  const supabase = createClient(supabaseUrl, requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
+  const { supabaseUrl, anonKey, serviceRoleKey } = readLocalSupabaseConfig()
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const results = await Promise.all([
-    upsertTestUser(supabase, {
+  const testUsers = [
+    {
       role: 'editor',
       email: requireEnv('TEST_EDITOR_EMAIL'),
       password: requireEnv('TEST_EDITOR_PASSWORD'),
-    }),
-    upsertTestUser(supabase, {
+    },
+    {
       role: 'admin',
       email: requireEnv('TEST_ADMIN_EMAIL'),
       password: requireEnv('TEST_ADMIN_PASSWORD'),
-    }),
-  ])
+    },
+  ]
 
-  console.log(`Test users ready: editor ${results[0]}, admin ${results[1]}.`)
+  const results = await Promise.all(testUsers.map((testUser) => upsertTestUser(supabase, testUser)))
+  await Promise.all(testUsers.map((testUser) => verifyTestUserLogin(supabaseUrl, anonKey, testUser)))
+
+  console.log(`Test users ready and verified: editor ${results[0]}, admin ${results[1]}.`)
 }
 
 main().catch((error) => {

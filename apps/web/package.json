@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:test-users": "node scripts/seed-test-users.mjs"
+    "seed:test-users": "node scripts/seed-test-users.mjs",
+    "db:reset": "supabase --workdir ../.. db reset --local && npm run seed:test-users"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

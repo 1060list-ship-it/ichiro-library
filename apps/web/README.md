@@ -36,10 +36,12 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # Local test-auth fixtures
 
-`supabase db reset` recreates the local Auth database and removes test users. After every reset, run this command once before Playwright tests:
+Reset the local database and restore the test Auth fixtures with one command:
 
 ```bash
-npm run seed:test-users
+npm run db:reset
 ```
 
-The command reads `.env.local` and `.env.test`, then idempotently creates or updates `TEST_EDITOR_*` and `TEST_ADMIN_*` through the local Supabase Auth Admin API. It also upserts the corresponding `user_roles` rows. It refuses non-local Supabase URLs.
+`db:reset` runs `supabase db reset --local` and then `seed:test-users`. The seed reads `TEST_EDITOR_*` and `TEST_ADMIN_*` from `.env.local` / `.env.test`, obtains its URL and keys only from the running local Supabase CLI, idempotently creates or updates both users through the local Auth Admin API, upserts their `user_roles`, and verifies that both accounts can log in.
+
+Do not use raw `supabase db reset` for local E2E setup. It intentionally deletes local Auth users and does not read the test credential environment variables. Use `npm run db:reset` from `apps/web`. `npm run seed:test-users` remains available only to repair fixtures without resetting the database.
