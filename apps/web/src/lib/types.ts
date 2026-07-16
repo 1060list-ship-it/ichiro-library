@@ -55,17 +55,28 @@ export type Rating = {
   created_at: string
 }
 
+export type Song = {
+  id: string
+  title: string
+  album: string | null
+  released_at: string | null
+  disc_no: number | null
+  track_no: number | null
+  notes: string | null
+}
+
 export type Entity = {
   id: string
   slug: string
   name: string
   match_names: string[]
-  category: 'family' | 'celebrity' | 'remixer' | 'team' | 'craftsman' | 'product' | 'project' | string
+  category: 'family' | 'celebrity' | 'remixer' | 'team' | 'craftsman' | 'product' | 'project' | 'song' | string
   role: string | null
   description: string
   related_work: string | null
   external_url: string | null
   sort_order: number | null
+  song_id: string | null
   created_at: string
   updated_at: string
 }
@@ -139,6 +150,42 @@ export type SearchStreamsArgs = {
   page_size?: number | null
 }
 
+export type CreateSongEntityArgs = {
+  p_song_id: string | null
+  p_song_title: string | null
+  p_song_album: string | null
+  p_song_disc_no: number | null
+  p_song_track_no: number | null
+  p_song_released_at: string | null
+  p_song_notes: string | null
+  p_entity_slug: string
+  p_entity_name: string
+  p_entity_role: string | null
+  p_entity_match_names: string[]
+  p_entity_description: string
+  p_entity_related_work: string | null
+  p_entity_external_url: string | null
+}
+
+export type UpdateSongMetaArgs = {
+  p_song_id: string
+  p_title: string
+  p_album: string | null
+  p_disc_no: number | null
+  p_track_no: number | null
+  p_released_at: string | null
+  p_notes: string | null
+}
+
+export type PreviewSongMatchesArgs = {
+  p_match_names: string[]
+}
+
+export type SongMatchPreviewResult = {
+  total: number
+  top: Array<{ stream_id: string; video_id: string; title: string; stream_date: string }>
+}
+
 export type EngagementRankingArgs = {
   limit_n?: number | null
   date_from?: string | null
@@ -152,6 +199,7 @@ export type Database = {
       chapters: { Row: Chapter; Insert: Omit<Chapter, 'id' | 'created_at'>; Update: Partial<Chapter>; Relationships: [] }
       ratings: { Row: Rating; Insert: Omit<Rating, 'id' | 'created_at'>; Update: Partial<Rating>; Relationships: [] }
       entities: { Row: Entity; Insert: Omit<Entity, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Entity>; Relationships: [] }
+      songs: { Row: Song; Insert: Omit<Song, 'id'> & { id?: string }; Update: Partial<Song>; Relationships: [] }
       stream_entities: { Row: StreamEntity; Insert: StreamEntity; Update: Partial<StreamEntity>; Relationships: [] }
       magazine_entities: { Row: MagazineEntity; Insert: MagazineEntity; Update: Partial<MagazineEntity>; Relationships: [] }
       user_roles: {
@@ -205,6 +253,18 @@ export type Database = {
       search_streams: {
         Args: SearchStreamsArgs
         Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'has_live_viewing' | 'talk_topics' | 'highlights' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
+      }
+      create_song_entity: {
+        Args: CreateSongEntityArgs
+        Returns: string
+      }
+      update_song_meta: {
+        Args: UpdateSongMetaArgs
+        Returns: undefined
+      }
+      preview_song_matches: {
+        Args: PreviewSongMatchesArgs
+        Returns: SongMatchPreviewResult
       }
     }
   }

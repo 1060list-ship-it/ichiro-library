@@ -7,9 +7,10 @@ import {
   type AdminTagVocabularyEntry,
 } from '@/lib/admin-tag-vocabulary'
 import { requireRole } from '@/lib/auth'
+import { normalizeSongTitle } from '@/lib/song-search'
 import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { Database, Highlight, Stream } from '@/lib/types'
+import type { Database, Highlight, SongMatchPreviewResult, Stream } from '@/lib/types'
 
 
 export type AdminDashboardData = {
@@ -739,6 +740,16 @@ export async function saveAdminChapters(input: SaveAdminChaptersInput): Promise<
 
 // ── Entity management ────────────────────────────────────────────────────────
 
+export type AdminEntitySong = {
+  id: string
+  title: string
+  album: string | null
+  disc_no: number | null
+  track_no: number | null
+  released_at: string | null
+  notes: string | null
+}
+
 export type AdminEntity = {
   id: string
   slug: string
@@ -750,6 +761,8 @@ export type AdminEntity = {
   related_work: string | null
   external_url: string | null
   sort_order: number | null
+  song_id: string | null
+  songs: AdminEntitySong | null
   created_at: string
   updated_at: string
 }
@@ -1343,4 +1356,141 @@ export async function removeAdminBookmark(streamId: string) {
     .eq('user_id', user.id)
     .eq('stream_id', streamId)
   if (error) throw new Error(`bookmark remove failed: ${error.message}`)
+}
+
+export type SongSearchResult = {
+  id: string
+  title: string
+  album: string | null
+  released_at: string | null
+}
+
+export async function searchSongs(query: string): Promise<{ exact: SongSearchResult[]; partial: SongSearchResult[] }> {
+  await requireRole(['admin'])
+  const trimmed = query.trim()
+  if (!trimmed) return { exact: [], partial: [] }
+
+  const { data, error } = await supabaseAdmin
+    .from('songs')
+    .select('id, title, album, released_at')
+
+  if (error) throw error
+
+  const normalizedQuery = normalizeSongTitle(trimmed)
+  const results = ((data ?? []) as unknown as SongSearchResult[])
+    .sort((left, right) => (right.released_at ?? '').localeCompare(left.released_at ?? ''))
+  const exact = results.filter((result) => normalizeSongTitle(result.title) === normalizedQuery)
+  const exactIds = new Set(exact.map((result) => result.id))
+  const partial = results
+    .filter((result) => (
+      !exactIds.has(result.id)
+      && normalizeSongTitle(result.title).includes(normalizedQuery)
+    ))
+    .slice(0, 20)
+
+  return { exact, partial }
+}
+
+export async function previewSongMatches(matchNames: string[]): Promise<SongMatchPreviewResult> {
+  await requireRole(['admin'])
+
+  const { data, error } = await supabaseAdmin.rpc('preview_song_matches', {
+    p_match_names: matchNames,
+  })
+
+  if (error) throw error
+
+  return data as unknown as SongMatchPreviewResult
+}
+
+export type CreateSongEntityInput = {
+  songId: string | null
+  songTitle: string
+  songAlbum: string
+  songDiscNo: string
+  songTrackNo: string
+  songReleasedAt: string
+  songNotes: string
+  entitySlug: string
+  entityName: string
+  entityRole: string
+  entityMatchNames: string[]
+  entityDescription: string
+  entityRelatedWork: string
+  entityExternalUrl: string
+}
+
+export type UpdateSongMetaInput = {
+  songId: string
+  title: string
+  album: string
+  discNo: string
+  trackNo: string
+  releasedAt: string
+  notes: string
+}
+
+function mapSongRpcErrorMessage(message: string): string {
+  switch (message) {
+    case 'song_not_found':
+      return '指定された楽曲が見つかりませんでした。'
+    case 'song_title_required':
+      return '新規作成時は楽曲タイトルが必須です。'
+    case 'song_already_has_entity':
+      return 'この楽曲は既にエンティティ化されています。'
+    case 'slug_already_exists':
+      return 'このスラッグは既に使用されています。'
+    case 'match_names_too_short':
+      return '3文字以上の別名キーワードを少なくとも1件登録してください。'
+    default:
+      return '保存に失敗しました。'
+  }
+}
+
+export async function createSongEntity(input: CreateSongEntityInput): Promise<{ id: string }> {
+  await requireRole(['admin'])
+  const { data, error } = await supabaseAdmin.rpc('create_song_entity', {
+    p_song_id: input.songId,
+    p_song_title: input.songId ? null : input.songTitle.trim(),
+    p_song_album: input.songAlbum.trim() || null,
+    p_song_disc_no: input.songDiscNo !== '' ? Number(input.songDiscNo) : null,
+    p_song_track_no: input.songTrackNo !== '' ? Number(input.songTrackNo) : null,
+    p_song_released_at: input.songReleasedAt || null,
+    p_song_notes: input.songNotes.trim() || null,
+    p_entity_slug: input.entitySlug.trim(),
+    p_entity_name: input.entityName.trim(),
+    p_entity_role: input.entityRole.trim() || null,
+    p_entity_match_names: input.entityMatchNames,
+    p_entity_description: input.entityDescription.trim(),
+    p_entity_related_work: input.entityRelatedWork.trim() || null,
+    p_entity_external_url: input.entityExternalUrl.trim() || null,
+  })
+
+  if (error) {
+    throw new Error(mapSongRpcErrorMessage(error.message))
+  }
+
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
+  return { id: data as unknown as string }
+}
+
+export async function updateSongMetaAction(input: UpdateSongMetaInput): Promise<void> {
+  await requireRole(['admin'])
+  const { error } = await supabaseAdmin.rpc('update_song_meta', {
+    p_song_id: input.songId,
+    p_title: input.title.trim(),
+    p_album: input.album.trim() || null,
+    p_disc_no: input.discNo !== '' ? Number(input.discNo) : null,
+    p_track_no: input.trackNo !== '' ? Number(input.trackNo) : null,
+    p_released_at: input.releasedAt || null,
+    p_notes: input.notes.trim() || null,
+  })
+
+  if (error) {
+    throw new Error(mapSongRpcErrorMessage(error.message))
+  }
+
+  revalidatePath('/admin/entity')
+  revalidatePath('/entity')
 }

@@ -40,13 +40,15 @@ export function linkifyEntities(text: string | null | undefined, entities: Linka
     const entity = aliasToEntity.get(part)
     if (!entity) return part
 
+    const displayText = part.startsWith('＊') ? `「${part.slice(1)}」` : part
+
     return (
       <Link
         key={`${entity.slug}-${index}`}
         href={`/entity/${entity.slug}`}
         className="text-indigo-300 underline decoration-indigo-500/40 underline-offset-4 hover:text-indigo-200"
       >
-        {part}
+        {displayText}
       </Link>
     )
   })

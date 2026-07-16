@@ -17,3 +17,6 @@ docs/*.json
 # 参照用画像・自動生成一時ファイル
 reference/
 supabase/.temp/
+
+# subagent-driven-development作業ログ（実装計画のブリーフ・レポート・レビューdiff等）
+.superpowers/

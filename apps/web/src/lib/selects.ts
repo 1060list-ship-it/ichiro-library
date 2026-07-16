@@ -81,6 +81,7 @@ export const PUBLIC_ENTITY_DETAIL_SELECT = [
   'description',
   'related_work',
   'external_url',
+  'songs(album, disc_no, track_no, released_at)',
 ].join(', ')
 
 export const PUBLIC_PLAYLIST_LIST_SELECT = [
@@ -111,6 +112,8 @@ export const ADMIN_ENTITY_SELECT = [
   'related_work',
   'external_url',
   'sort_order',
+  'song_id',
   'created_at',
   'updated_at',
+  'songs(id, title, album, disc_no, track_no, released_at, notes)',
 ].join(', ')

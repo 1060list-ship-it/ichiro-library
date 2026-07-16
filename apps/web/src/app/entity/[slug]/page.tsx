@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { PUBLIC_ENTITY_DETAIL_SELECT } from '@/lib/selects'
-import type { Entity, Stream } from '@/lib/types'
+import type { Entity, Song, Stream } from '@/lib/types'
 
 const CATEGORY_LABELS: Record<string, string> = {
   family: '家族・地元',
@@ -19,7 +19,10 @@ type PageProps = {
   params: Promise<{ slug: string }>
 }
 
-type EntityDetail = Pick<Entity, 'id' | 'slug' | 'name' | 'category' | 'role' | 'description' | 'related_work' | 'external_url'>
+type EntitySongMeta = Pick<Song, 'album' | 'disc_no' | 'track_no' | 'released_at'>
+type EntityDetail = Pick<Entity, 'id' | 'slug' | 'name' | 'category' | 'role' | 'description' | 'related_work' | 'external_url'> & {
+  songs: EntitySongMeta | null
+}
 
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category
@@ -60,6 +63,7 @@ export default async function EntityDetailPage({ params }: PageProps) {
   }
 
   const entity = data as unknown as EntityDetail
+  const hasSongMeta = entity.songs && (entity.songs.album || entity.songs.disc_no || entity.songs.track_no || entity.songs.released_at)
   const relatedStreams = await fetchRelatedStreams(entity.id)
 
   return (
@@ -94,6 +98,19 @@ export default async function EntityDetailPage({ params }: PageProps) {
           <section className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-2">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest">Related Work</p>
             <p className="text-sm text-gray-200 leading-relaxed">{entity.related_work}</p>
+          </section>
+        )}
+
+        {entity.category === 'song' && hasSongMeta && (
+          <section className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-2">
+            <p className="text-xs text-gray-500 font-semibold uppercase tracking-widest">Album Info</p>
+            <div className="text-sm text-gray-200 space-y-1">
+              {entity.songs?.album && <p>アルバム/シングル: {entity.songs.album}</p>}
+              {(entity.songs?.disc_no || entity.songs?.track_no) && (
+                <p>収録: {entity.songs?.disc_no ?? '-'}枚目 / {entity.songs?.track_no ?? '-'}曲目</p>
+              )}
+              {entity.songs?.released_at && <p>発売日: {entity.songs.released_at}</p>}
+            </div>
           </section>
         )}
 

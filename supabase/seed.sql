@@ -1,13 +1,12 @@
 -- Seed data for local development / initial testing
 -- Run AFTER 001_initial_schema.sql
 
-BEGIN;
-
 -- Local seed でも streams.tags を統制語彙に限定する。
 INSERT INTO tag_vocabulary (slug, label, category, sort_order, is_active) VALUES
   ('music_production', '音楽制作', 'content', 10, true),
   ('guest', 'ゲスト', 'content', 20, true),
-  ('gaming', 'ゲーム', 'content', 30, true)
+  ('gaming', 'ゲーム', 'content', 30, true),
+  ('relationships', '人間関係', 'content', 40, false)
 ON CONFLICT (slug) DO UPDATE SET
   label = EXCLUDED.label,
   category = EXCLUDED.category,
@@ -17,20 +16,19 @@ ON CONFLICT (slug) DO UPDATE SET
 -- ============================================================
 -- Sample streams (3 entries)
 -- ============================================================
-CREATE TEMP TABLE tag_guard_seed_streams (LIKE streams INCLUDING DEFAULTS);
-
-INSERT INTO tag_guard_seed_streams (
+WITH seed_streams (
   video_id, title, stream_date, duration_min,
   view_count, comment_count,
   summary, tags, corner_names, guests,
   transcript,
   youtube_url, thumbnail_url,
   status, ai_model, ai_prompt_ver, is_reviewed
-) VALUES
+) AS (
+VALUES
 (
   'test_stream_001',
   '【深夜ラジオ】眠れない夜に　サカナクション山口一郎の独り語り',
-  '2026-03-15',
+  DATE '2026-03-15',
   92,
   18500,
   342,
@@ -49,7 +47,7 @@ INSERT INTO tag_guard_seed_streams (
 (
   'test_stream_002',
   '【深夜対談】草野マサムネ × 山口一郎　音楽と言葉の話',
-  '2026-03-22',
+  DATE '2026-03-22',
   118,
   42300,
   891,
@@ -68,7 +66,7 @@ INSERT INTO tag_guard_seed_streams (
 (
   'test_stream_003',
   '【未知との遭遇】最近ハマってる音楽10選　縛りなし全ジャンル',
-  '2026-04-05',
+  DATE '2026-04-05',
   75,
   9800,
   215,
@@ -83,26 +81,23 @@ INSERT INTO tag_guard_seed_streams (
   'gemini-1.5-flash',
   'v1',
   false
-);
-
-DO $$
-DECLARE
-  invalid_tags text[];
-BEGIN
-  SELECT array_agg(DISTINCT candidate.tag ORDER BY candidate.tag)
-  INTO invalid_tags
-  FROM tag_guard_seed_streams seed_stream
+)
+),
+invalid_tags AS (
+  SELECT DISTINCT candidate.tag
+  FROM seed_streams seed_stream
   CROSS JOIN LATERAL unnest(coalesce(seed_stream.tags, '{}'::text[])) AS candidate(tag)
   LEFT JOIN tag_vocabulary vocabulary
     ON vocabulary.slug = candidate.tag
    AND vocabulary.is_active = true
-  WHERE vocabulary.slug IS NULL;
-
-  IF cardinality(coalesce(invalid_tags, '{}'::text[])) > 0 THEN
-    RAISE EXCEPTION 'seed contains invalid/inactive stream tags: %', invalid_tags;
-  END IF;
-END
-$$;
+  WHERE vocabulary.slug IS NULL
+),
+tag_validation AS (
+  -- The reference to valid below makes an invalid tag abort this INSERT before
+  -- any stream row can be written.  Keep this as one statement: Supabase CLI
+  -- prepares seed statements independently, so TEMP tables cannot cross them.
+  SELECT 1 / CASE WHEN EXISTS (SELECT 1 FROM invalid_tags) THEN 0 ELSE 1 END AS valid
+)
 
 INSERT INTO streams (
   video_id, title, stream_date, duration_min,
@@ -119,9 +114,9 @@ SELECT
   transcript,
   youtube_url, thumbnail_url,
   status, ai_model, ai_prompt_ver, is_reviewed
-FROM tag_guard_seed_streams;
-
-DROP TABLE tag_guard_seed_streams;
+FROM seed_streams
+CROSS JOIN tag_validation
+WHERE tag_validation.valid = 1;
 
 -- ============================================================
 -- Sample chapters
@@ -171,5 +166,3 @@ UNION ALL
 SELECT id, 'hash_user_c', 4 FROM s2
 UNION ALL
 SELECT id, 'hash_user_d', 5 FROM s2;
-
-COMMIT;
