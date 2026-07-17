@@ -57,3 +57,24 @@ export function linkifyEntities(text: string | null | undefined, entities: Linka
 export function linkifyBody(text: string | null | undefined, entities: LinkableEntity[]): ReactNode {
   return linkifyEntities(text, entities.filter((entity) => !BODY_LINKIFY_EXCLUDED_SLUGS.includes(entity.slug)))
 }
+
+// guests配列などの「1要素=1個の完結した固有表現」に対する用途。
+// 部分一致(linkifyEntities)を使うと"サカナクションノート"が"サカナクション"にヒットしてしまうため、完全一致のみ許可する。
+// 完結した固有表現である前提のため、本文用のlength>=3フィルタは適用しない。
+export function linkifyExact(text: string | null | undefined, entities: LinkableEntity[]): ReactNode {
+  if (!text) return text ?? ''
+
+  const entity = entities.find((candidate) => (candidate.match_names ?? []).includes(text))
+  if (!entity) return text
+
+  const displayText = text.startsWith('＊') ? `「${text.slice(1)}」` : text
+
+  return (
+    <Link
+      href={`/entity/${entity.slug}`}
+      className="text-indigo-300 underline decoration-indigo-500/40 underline-offset-4 hover:text-indigo-200"
+    >
+      {displayText}
+    </Link>
+  )
+}

@@ -10,7 +10,7 @@ import {
   PUBLIC_STREAM_MAGAZINE_MAP_SELECT,
 } from '@/lib/selects'
 import { supabase } from '@/lib/supabase'
-import { linkifyBody, linkifyEntities } from '@/lib/linkify'
+import { linkifyBody, linkifyExact } from '@/lib/linkify'
 import type { Entity } from '@/lib/types'
 
 // -----------------------------------------------------------------------
@@ -513,7 +513,7 @@ export default function MagazineWeekPage() {
                   key={i}
                   className="text-sm text-emerald-300 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1 rounded-full"
                 >
-                  {linkifyEntities(g, entities)}
+                  {linkifyExact(g, entities)}
                 </span>
               ))}
             </div>
