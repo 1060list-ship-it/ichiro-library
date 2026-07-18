@@ -21,7 +21,6 @@ export type Stream = {
   like_count: number | null
   songs: string[] | null
   has_live_singing: boolean | null
-  has_live_viewing: boolean | null
   talk_topics: string[] | null
   highlights: Highlight[] | null
   youtube_url: string | null
@@ -252,7 +251,7 @@ export type Database = {
       }
       search_streams: {
         Args: SearchStreamsArgs
-        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'has_live_viewing' | 'talk_topics' | 'highlights' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
+        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'talk_topics' | 'highlights' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
       }
       create_song_entity: {
         Args: CreateSongEntityArgs

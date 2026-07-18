@@ -35,8 +35,6 @@ type FormState = {
   guests: string
   songs: string
   hasLiveSinging: boolean
-  hasLiveViewing: boolean
-  supportsLiveViewing: boolean
   talkTopics: string
   highlights: Highlight[]
   isReviewed: boolean
@@ -91,8 +89,6 @@ function toFormState(stream: AdminEditableStream): FormState {
     guests: toCsv(stream.guests),
     songs: toCsv(stream.songs),
     hasLiveSinging: Boolean(stream.has_live_singing),
-    hasLiveViewing: Boolean(stream.has_live_viewing),
-    supportsLiveViewing: stream.supportsLiveViewing,
     talkTopics: toCsv(stream.talk_topics),
     highlights: stream.highlights ?? [],
     isReviewed: stream.is_reviewed,
@@ -275,7 +271,6 @@ export default function StreamEditorClient({ videoId }: Props) {
     setForm({
       ...form,
       cornerNames: nextCornerNames,
-      hasLiveViewing: nextCornerNames.includes('ライブビデオ解説') ? true : form.hasLiveViewing,
     })
   }
 
@@ -344,7 +339,6 @@ export default function StreamEditorClient({ videoId }: Props) {
       guests: form.guests,
       songs: form.songs,
       hasLiveSinging: form.hasLiveSinging,
-      hasLiveViewing: form.supportsLiveViewing ? form.hasLiveViewing : false,
       talkTopics: form.talkTopics,
       highlights: form.highlights,
       isReviewed: form.isReviewed,
@@ -702,24 +696,6 @@ export default function StreamEditorClient({ videoId }: Props) {
                   <div>
                     <p className="text-sm text-gray-300">歌唱あり</p>
                     <p className="text-xs text-gray-500">配信内で実際に歌っている場面がある場合にオンにします。</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 rounded-lg border border-gray-800 bg-gray-950 px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={form.hasLiveViewing}
-                    disabled={!form.supportsLiveViewing}
-                    onChange={(event) => setForm({ ...form, hasLiveViewing: event.target.checked })}
-                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-white focus:ring-0"
-                  />
-                  <div>
-                    <p className="text-sm text-gray-300">ライブ鑑賞あり</p>
-                    <p className="text-xs text-gray-500">
-                      {form.supportsLiveViewing
-                        ? '過去のライブ映像を見ながら話している配信ならオンにします。'
-                        : 'DB項目未適用のため、いまは保存できません。migration 適用後に使えます。'}
-                    </p>
                   </div>
                 </label>
               </div>

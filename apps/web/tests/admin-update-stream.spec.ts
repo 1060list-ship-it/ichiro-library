@@ -42,7 +42,6 @@ function createUpdateInput(videoId: string, summary: string, tags?: string[] | n
     guests: '',
     songs: '',
     hasLiveSinging: false,
-    hasLiveViewing: false,
     talkTopics: '',
     highlights: [],
     isReviewed: false,

@@ -43,12 +43,9 @@ export type AdminEditableStream = Pick<
   | 'guests'
   | 'songs'
   | 'has_live_singing'
-  | 'has_live_viewing'
   | 'talk_topics'
   | 'highlights'
-> & {
-  supportsLiveViewing: boolean
-}
+>
 
 export type AdminChapter = {
   id: string
@@ -67,7 +64,6 @@ export type UpdateAdminStreamInput = {
   guests: string
   songs: string
   hasLiveSinging: boolean
-  hasLiveViewing: boolean
   talkTopics: string
   highlights: Highlight[]
   isReviewed: boolean
@@ -146,11 +142,6 @@ const ADMIN_STREAM_SELECT_BASE = `
   talk_topics
 `
 
-const ADMIN_STREAM_SELECT_WITH_LIVE_VIEWING = `
-  ${ADMIN_STREAM_SELECT_BASE},
-  has_live_viewing
-`
-
 const SEARCH_LOG_BATCH_SIZE = 1000
 const SEARCH_LOG_DAILY_WINDOW_DAYS = 30
 const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
@@ -159,18 +150,6 @@ const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
 })
-
-function isMissingLiveViewingColumn(error: unknown) {
-  if (!error || typeof error !== 'object') {
-    return false
-  }
-
-  const message = 'message' in error && typeof error.message === 'string'
-    ? error.message
-    : ''
-
-  return message.includes('has_live_viewing')
-}
 
 function normalizeCsv(value: string) {
   const items = value
@@ -228,16 +207,6 @@ function toEditableStream(stream: AdminEditableStream): AdminEditableStream {
     ...stream,
     youtube_url: stream.youtube_url ?? `https://www.youtube.com/watch?v=${stream.video_id}`,
   }
-}
-
-function toEditableStreamWithoutLiveViewing(
-  stream: Omit<AdminEditableStream, 'has_live_viewing' | 'supportsLiveViewing'> & { has_live_viewing?: boolean | null }
-): AdminEditableStream {
-  return toEditableStream({
-    ...stream,
-    has_live_viewing: stream.has_live_viewing ?? null,
-    supportsLiveViewing: false,
-  })
 }
 
 export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
@@ -536,33 +505,17 @@ export async function setAdminStreamReviewed(videoId: string, isReviewed: boolea
 export async function fetchAdminStream(videoId: string): Promise<AdminEditableStream | null> {
   await requireRole(['admin'])
 
-  const withLiveViewing = await supabaseAdmin
-    .from('streams')
-    .select(ADMIN_STREAM_SELECT_WITH_LIVE_VIEWING)
-    .eq('video_id', videoId)
-    .maybeSingle()
-
-  if (!withLiveViewing.error) {
-    return withLiveViewing.data
-      ? toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
-      : null
-  }
-
-  if (!isMissingLiveViewingColumn(withLiveViewing.error)) {
-    throw withLiveViewing.error
-  }
-
-  const fallback = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('streams')
     .select(ADMIN_STREAM_SELECT_BASE)
     .eq('video_id', videoId)
     .maybeSingle()
 
-  if (fallback.error) {
-    throw fallback.error
+  if (error) {
+    throw error
   }
 
-  return fallback.data ? toEditableStreamWithoutLiveViewing(fallback.data) : null
+  return data ? toEditableStream(data as unknown as AdminEditableStream) : null
 }
 
 export async function fetchAdminTagVocabulary(): Promise<AdminTagVocabularyEntry[]> {
@@ -644,7 +597,6 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
     songs: normalizeCsv(input.songs),
     has_live_singing: input.hasLiveSinging,
     highlights: input.highlights.length > 0 ? input.highlights : null,
-    has_live_viewing: input.hasLiveViewing,
     talk_topics: normalizeCsv(input.talkTopics),
     is_reviewed: input.isReviewed,
   }
@@ -652,35 +604,15 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
     updates.tags = tagUpdate.storageValue ?? null
   }
 
-  const withLiveViewing = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('streams')
     .update(updates as never)
     .eq('video_id', input.videoId)
-    .select(ADMIN_STREAM_SELECT_WITH_LIVE_VIEWING)
+    .select(ADMIN_STREAM_SELECT_BASE)
     .single()
 
-  let data: AdminEditableStream
-
-  if (!withLiveViewing.error) {
-    data = toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
-  } else if (isMissingLiveViewingColumn(withLiveViewing.error)) {
-    const fallbackUpdates = { ...updates }
-    delete fallbackUpdates.has_live_viewing
-
-    const fallback = await supabaseAdmin
-      .from('streams')
-      .update(fallbackUpdates as never)
-      .eq('video_id', input.videoId)
-      .select(ADMIN_STREAM_SELECT_BASE)
-      .single()
-
-    if (fallback.error) {
-      throw fallback.error
-    }
-
-    data = toEditableStreamWithoutLiveViewing(fallback.data)
-  } else {
-    throw withLiveViewing.error
+  if (error) {
+    throw error
   }
 
   revalidatePath('/admin')
@@ -689,7 +621,7 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
 
   return {
     ok: true,
-    stream: data,
+    stream: toEditableStream(data as unknown as AdminEditableStream),
     droppedInvalidTags: tagUpdate.droppedInvalidTags,
     droppedInactiveTags: tagUpdate.droppedInactiveTags,
   }
@@ -1156,38 +1088,21 @@ export async function markStreamReviewed(videoId: string): Promise<AdminEditable
 
   const updates: StreamUpdate = { is_reviewed: true }
 
-  const withLiveViewing = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('streams')
     .update(updates as never)
     .eq('video_id', videoId)
-    .select(ADMIN_STREAM_SELECT_WITH_LIVE_VIEWING)
+    .select(ADMIN_STREAM_SELECT_BASE)
     .single()
 
-  let data: AdminEditableStream
-
-  if (!withLiveViewing.error) {
-    data = toEditableStream({ ...(withLiveViewing.data as unknown as AdminEditableStream), supportsLiveViewing: true })
-  } else if (isMissingLiveViewingColumn(withLiveViewing.error)) {
-    const fallback = await supabaseAdmin
-      .from('streams')
-      .update(updates as never)
-      .eq('video_id', videoId)
-      .select(ADMIN_STREAM_SELECT_BASE)
-      .single()
-
-    if (fallback.error) {
-      throw fallback.error
-    }
-
-    data = toEditableStreamWithoutLiveViewing(fallback.data)
-  } else {
-    throw withLiveViewing.error
+  if (error) {
+    throw error
   }
 
   revalidatePath('/admin')
   revalidatePath(`/admin/stream/${videoId}`)
 
-  return data
+  return toEditableStream(data as unknown as AdminEditableStream)
 }
 
 export type ScrutinyEntity = {
