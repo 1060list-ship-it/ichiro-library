@@ -259,6 +259,11 @@ def main(dry_run: bool = False) -> int:
         run_job(client, job, dry_run=dry_run)
         mark_job_done(client, job["id"])
         logger.info("job done: %s", job["id"])
+    except SystemExit as exc:
+        logger.error("job aborted via SystemExit: %s (code=%s)", job["id"], exc.code)
+        mark_job_failed(client, job["id"], f"aborted: SystemExit(code={exc.code})")
+        write_status_file(client)
+        return 1
     except Exception as exc:
         logger.exception("job failed: %s", job["id"])
         mark_job_failed(client, job["id"], str(exc))
