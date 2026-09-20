@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -64,6 +64,7 @@ function HighlightList({ highlights, videoId, entities }: { highlights: Highligh
 }
 
 const REPORT_STORAGE_PREFIX = 'ichiro_reported_'
+type ReportFailure = 'server' | 'storage' | null
 
 export default function StreamPage() {
   const { id } = useParams<{ id: string }>()
@@ -73,11 +74,19 @@ export default function StreamPage() {
   const [loading, setLoading] = useState(true)
   const [reported, setReported] = useState(false)
   const [reporting, setReporting] = useState(false)
+  const [reportFailure, setReportFailure] = useState<ReportFailure>(null)
+  const reportInFlight = useRef(false)
 
   useEffect(() => {
     async function load() {
       const { data: s } = await supabase.from('streams').select(PUBLIC_STREAM_DETAIL_SELECT).eq('video_id', id).single() as { data: StreamDetail | null }
-      setReported(Boolean(localStorage.getItem(REPORT_STORAGE_PREFIX + id)))
+      try {
+        setReported(Boolean(localStorage.getItem(REPORT_STORAGE_PREFIX + id)))
+      } catch {
+        // Storage may be unavailable during initial load; keep the page usable
+        // and let a successful submission establish the in-memory sent state.
+        setReported(false)
+      }
       if (s) {
         setStream(s)
         const { data: entityRows } = await supabase
@@ -108,12 +117,32 @@ export default function StreamPage() {
   }, [id])
 
   async function handleReport() {
-    if (reported || reporting) return
+    if (reported || reporting || reportInFlight.current) return
+
+    reportInFlight.current = true
     setReporting(true)
-    await reportStreamSummary(id, navigator.userAgent)
-    localStorage.setItem(REPORT_STORAGE_PREFIX + id, '1')
-    setReported(true)
-    setReporting(false)
+    setReportFailure(null)
+
+    try {
+      const result = await reportStreamSummary(id, navigator.userAgent)
+      if (!result.ok) {
+        setReportFailure('server')
+        return
+      }
+
+      setReported(true)
+      try {
+        localStorage.setItem(REPORT_STORAGE_PREFIX + id, '1')
+      } catch {
+        // The request reached the server, but this browser cannot remember it for a future visit.
+        setReportFailure('storage')
+      }
+    } catch {
+      setReportFailure('server')
+    } finally {
+      reportInFlight.current = false
+      setReporting(false)
+    }
   }
 
   if (loading) return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">読み込み中...</div>
@@ -203,6 +232,12 @@ export default function StreamPage() {
             <div className="pt-2 space-y-1">
               {!reported && !reporting && (
                 <p className="text-xs text-gray-500">要約が気になる場合はお知らせください。</p>
+              )}
+              {reportFailure === 'server' && (
+                <p role="alert" className="text-xs text-rose-300">送信に失敗しました。時間をおいて、もう一度お試しください。</p>
+              )}
+              {reportFailure === 'storage' && (
+                <p role="alert" className="text-xs text-amber-300">依頼は送信されましたが、この端末には記録できませんでした。</p>
               )}
               <button
                 type="button"
