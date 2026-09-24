@@ -1,0 +1,61 @@
+name: Migration Replay
+
+# 目的: 全migrationを空DBへクリーン再生し、本番適用前に「再生不能なmigration」を検出する。
+# 背景: 2026-07-11に 014a が has_live_singing 不在で必ず失敗する状態が3週間誰にも気づかれなかった
+#       （TASKS.md「migration履歴とリモート実態のドリフト解消」の恒久対策）。
+# 秘密情報は使用しない（ローカルDockerのみ）。
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'supabase/tests/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/migration-replay.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'supabase/tests/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/migration-replay.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: migration-replay-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SUPABASE_DISABLE_TELEMETRY: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          # ローカル検証（2026-09-24）と同じバージョンに固定する。更新時はローカルで
+          # `supabase db start` → `db reset --local` → `db lint --local` → `test db --local`
+          # を再実行してから、この値を上げること。
+          version: 2.102.0
+
+      - name: Start local stack and apply migrations
+        run: supabase db start
+
+      - name: Clean replay (all migrations + seed)
+        run: supabase db reset --local
+
+      - name: Lint schema
+        run: supabase db lint --local
+
+      - name: Smoke tests (pgTAP)
+        run: supabase test db --local

@@ -153,3 +153,8 @@ python worker.py --dry-run
 | **4.5** | 週刊マガジン（外部メディア統合・エンティティページ） | ✅ 完了 |
 | **5** | Vercel デプロイ | ✅ 完了（本番稼働中） |
 | **6** | 自動巡回バッチ（GitHub Actions） | ✅ 完了 |
+
+## migration クリーン再生CI・ドリフト検知
+
+`supabase/migrations` 変更時のクリーン再生検証（PR/push）と、本番migration履歴のドリフト週次検知をGitHub Actionsで実行する。
+運用手順・失敗時の対応は `docs/operations/migration-drift-and-replay.md` を参照。

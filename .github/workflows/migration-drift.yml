@@ -1,0 +1,46 @@
+name: Migration Drift Check
+
+# 目的: 本番Supabaseのmigration履歴とローカル `supabase/migrations/*.sql` のドリフトを週次検知する。
+# 背景: Dashboard/SQLエディタからの直接適用は履歴に残らず、クリーン再生や新環境構築を壊す
+#       （2026-07-11発見の has_live_singing / Dashboard由来4件）。
+# 読み取り専用: Management API GET /v1/projects/{ref}/database/migrations のみを呼ぶ。
+# 必要な設定: リポジトリsecrets に SUPABASE_ACCESS_TOKEN（database 読み取り権限）。
+#             project ref はリポジトリvariables `SUPABASE_PROJECT_REF`（未設定時は既定値）。
+
+on:
+  schedule:
+    # 毎週月曜 09:00 JST（月曜 00:00 UTC）
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: migration-drift
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Check migration drift
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -o pipefail
+          python3 scripts/check_migration_drift.py \
+            --project-ref "${{ vars.SUPABASE_PROJECT_REF || 'tpgmbulgebcrmzbjvzwj' }}" \
+            --local-dir supabase/migrations | tee -a "$GITHUB_STEP_SUMMARY"
