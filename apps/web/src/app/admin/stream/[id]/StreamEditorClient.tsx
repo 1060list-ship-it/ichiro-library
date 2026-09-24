@@ -7,7 +7,6 @@ import {
   getSelectableAdminTags,
   type AdminTagVocabularyEntry,
 } from '@/lib/admin-tag-vocabulary'
-import type { Highlight } from '@/lib/types'
 import type {
   AdminChapter,
   AdminEditableStream,
@@ -36,7 +35,6 @@ type FormState = {
   songs: string
   hasLiveSinging: boolean
   talkTopics: string
-  highlights: Highlight[]
   isReviewed: boolean
 }
 
@@ -49,7 +47,6 @@ type EditableChapter = {
 }
 
 const LEGACY_CORNER_NAMES = ['未知との遭遇', '深夜対談', 'ライブビデオ解説', 'ゲーム実況']
-const HIGHLIGHT_REASONS: Highlight['reason'][] = ['笑い', '名言', '感動', '驚き', '神回']
 const SCRUTINY_CATEGORY_LABELS: Record<string, string> = {
   song: '曲名',
   person: '人名',
@@ -90,7 +87,6 @@ function toFormState(stream: AdminEditableStream): FormState {
     songs: toCsv(stream.songs),
     hasLiveSinging: Boolean(stream.has_live_singing),
     talkTopics: toCsv(stream.talk_topics),
-    highlights: stream.highlights ?? [],
     isReviewed: stream.is_reviewed,
   }
 }
@@ -274,42 +270,6 @@ export default function StreamEditorClient({ videoId }: Props) {
     })
   }
 
-  function updateHighlight(index: number, nextValue: Highlight) {
-    if (!form) return
-
-    setForm({
-      ...form,
-      highlights: form.highlights.map((highlight, highlightIndex) =>
-        highlightIndex === index ? nextValue : highlight
-      ),
-    })
-  }
-
-  function removeHighlight(index: number) {
-    if (!form) return
-
-    setForm({
-      ...form,
-      highlights: form.highlights.filter((_, highlightIndex) => highlightIndex !== index),
-    })
-  }
-
-  function addHighlight() {
-    if (!form) return
-
-    setForm({
-      ...form,
-      highlights: [
-        ...form.highlights,
-        {
-          start_sec: 0,
-          quote: '',
-          reason: '笑い',
-        },
-      ],
-    })
-  }
-
   function updateChapter(index: number, nextValue: EditableChapter) {
     setChapters((current) =>
       current.map((chapter, chapterIndex) => (chapterIndex === index ? nextValue : chapter))
@@ -340,7 +300,6 @@ export default function StreamEditorClient({ videoId }: Props) {
       songs: form.songs,
       hasLiveSinging: form.hasLiveSinging,
       talkTopics: form.talkTopics,
-      highlights: form.highlights,
       isReviewed: form.isReviewed,
     }
 
@@ -847,94 +806,6 @@ export default function StreamEditorClient({ videoId }: Props) {
                     {savingChapters ? '保存中...' : 'チャプターを保存'}
                   </button>
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-300">盛り上がりワード</p>
-                  <p className="text-xs text-gray-500">印象に残る瞬間を、開始秒・発言・種別で調整します。</p>
-                </div>
-
-                <div className="space-y-3">
-                  {form.highlights.map((highlight, index) => (
-                    <div
-                      key={index}
-                      className="space-y-3 rounded-xl border border-gray-800 bg-gray-950 p-4"
-                    >
-                      <div className="grid gap-3 md:grid-cols-[120px_1fr_140px_auto]">
-                        <label className="block space-y-2">
-                          <span className="text-sm text-gray-300">開始秒</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={highlight.start_sec}
-                            onChange={(event) =>
-                              updateHighlight(index, {
-                                ...highlight,
-                                start_sec: Number(event.target.value) || 0,
-                              })
-                            }
-                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
-                          />
-                        </label>
-
-                        <label className="block space-y-2">
-                          <span className="text-sm text-gray-300">発言</span>
-                          <input
-                            value={highlight.quote}
-                            onChange={(event) =>
-                              updateHighlight(index, {
-                                ...highlight,
-                                quote: event.target.value,
-                              })
-                            }
-                            placeholder="例: これはヤバい"
-                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600 truncate focus:overflow-x-auto"
-                          />
-                        </label>
-
-                        <label className="block space-y-2">
-                          <span className="text-sm text-gray-300">種別</span>
-                          <select
-                            value={highlight.reason}
-                            onChange={(event) =>
-                              updateHighlight(index, {
-                                ...highlight,
-                                reason: event.target.value as Highlight['reason'],
-                              })
-                            }
-                            className="w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white outline-none transition focus:border-gray-600"
-                          >
-                            {HIGHLIGHT_REASONS.map((reason) => (
-                              <option key={reason} value={reason}>
-                                {reason}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            onClick={() => removeHighlight(index)}
-                            className="rounded-lg border border-gray-800 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={addHighlight}
-                  className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition hover:border-gray-500 hover:text-white"
-                >
-                  + 追加
-                </button>
               </div>
 
               {(pageError || saveMessage) && (

@@ -16,7 +16,6 @@ type Magazine = {
     topics: { title: string }[]
     guests: string[]
     songs: string[]
-    highlights: unknown[]
   }
   cover_image_url: string | null
   generated_at: string

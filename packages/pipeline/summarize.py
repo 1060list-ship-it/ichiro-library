@@ -168,7 +168,7 @@ def summarize(
 
         result = json.loads(raw, strict=False)
         _validate_result(result)
-        logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, highlights={len(result.get('highlights', []))}, tags={result.get('tags', [])}")
+        logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, tags={result.get('tags', [])}")
         return result
 
     except json.JSONDecodeError as e:

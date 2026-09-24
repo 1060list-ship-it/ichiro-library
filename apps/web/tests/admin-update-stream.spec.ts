@@ -43,7 +43,6 @@ function createUpdateInput(videoId: string, summary: string, tags?: string[] | n
     songs: '',
     hasLiveSinging: false,
     talkTopics: '',
-    highlights: [],
     isReviewed: false,
   }
 }

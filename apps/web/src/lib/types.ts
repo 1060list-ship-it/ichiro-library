@@ -1,9 +1,3 @@
-export type Highlight = {
-  start_sec: number
-  quote: string
-  reason: '笑い' | '名言' | '感動' | '驚き' | '神回'
-}
-
 export type Stream = {
   id: string
   video_id: string
@@ -22,7 +16,6 @@ export type Stream = {
   songs: string[] | null
   has_live_singing: boolean | null
   talk_topics: string[] | null
-  highlights: Highlight[] | null
   youtube_url: string | null
   thumbnail_url: string | null
   status: string
@@ -251,7 +244,7 @@ export type Database = {
       }
       search_streams: {
         Args: SearchStreamsArgs
-        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'talk_topics' | 'highlights' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
+        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'talk_topics' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
       }
       create_song_entity: {
         Args: CreateSongEntityArgs

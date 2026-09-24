@@ -59,8 +59,6 @@ THIS WEEK'S CONTENT (derive ONE strong visual metaphor from these — ignore gen
 - Topics covered: {topics}
 - Songs featured: {songs}
 - Guests this week: {guests}
-- Memorable quotes: {key_quotes}
-- Emotional tone: {mood}
 
 Choose a single concrete visual scene or object that best captures the specific texture of this week. Do not default to fish, water, or microphone unless they genuinely appear in the content above. Output the prompt now."""
 
@@ -102,20 +100,11 @@ MAGAZINE_PROMPT = """あなたは「いっくん追いかけマガジン」の�
   "songs": [
     {{"title": "曲名", "video_id": "その曲が流れた動画のID"}}
   ],
-  "highlights": [
-    {{
-      "video_id": "動画ID",
-      "quote": "発言の引用（50字以内）",
-      "reason": "盛り上がりの種別（笑い・名言・感動・驚き・神回のいずれか）",
-      "start_sec": 開始秒数（整数）
-    }}
-  ],
   "editor_note": "次週へのひとこと・期待感（50〜100字）"
 }}
 
 ## 注意
 - topicsは大きなテーマ単位で2〜5個にまとめること（配信1本=1トピックにしない）
-- highlightsは今週全体から特に印象的な3〜5個を選ぶ
 - 前週コンテキストは参考情報として使い、今週の話題を中心に書く
 - songsは曲名の重複を排除すること。同じ曲が複数配信で流れた場合は最初に登場した配信のvideo_idを採用する
 - 外部メディア情報がある場合はtopicsに自然に統合すること（「ニュースによると」等の引用形式は不要、ファクトとして使う）
@@ -144,17 +133,6 @@ def week_label(monday: date) -> str:
 def _generate(client, prompt: str) -> str:
     response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
     return response.text.strip()
-
-
-def _mood_from_highlights(highlights: list) -> str:
-    from collections import Counter
-    reasons = [h.get("reason", "") for h in highlights if h.get("reason")]
-    if not reasons:
-        return "balanced"
-    most_common = Counter(reasons).most_common(1)[0][0]
-    mapping = {"笑い": "lighthearted and fun", "名言": "thoughtful and inspiring",
-               "感動": "emotional and moving", "驚き": "surprising and energetic", "神回": "legendary and epic"}
-    return mapping.get(most_common, "balanced")
 
 
 def _sanitize_cover_prompt(raw: str, label: str) -> str:
@@ -352,8 +330,6 @@ def generate_cover_image(
     monday: date, sunday: date,
 ) -> Optional[str]:
     try:
-        all_highlights = content.get("highlights", [])
-        mood = _mood_from_highlights(all_highlights)
         topics = ", ".join(t["title"] for t in content.get("topics", []))
         songs_raw = content.get("songs", [])[:5]
         songs = ", ".join(
@@ -364,10 +340,6 @@ def generate_cover_image(
         guests_list = content.get("guests", []) or []
         guests = ", ".join(guests_list) if guests_list else "none"
 
-        key_quotes = "; ".join(
-            f'"{h["quote"]}"' for h in all_highlights[:3] if h.get("quote")
-        ) or "none"
-
         intro_text = content.get("intro", "") or ""
         intro_excerpt = intro_text[:180].rstrip("。、") + ("…" if len(intro_text) > 180 else "")
 
@@ -377,8 +349,6 @@ def generate_cover_image(
             topics=topics,
             songs=songs,
             guests=guests,
-            key_quotes=key_quotes,
-            mood=mood,
         )
 
         logger.info(f"[{label}] カバープロンプト生成中...")
@@ -469,11 +439,11 @@ def generate_magazine(target_date: date = None, force: bool = False):
     # started_at カラムは migration 009 適用後に有効。未適用時は stream_date でフォールバック
     try:
         streams_res = sb.table("streams").select(
-            "id, video_id, title, stream_date, started_at, summary, tags, corner_names, guests, songs, highlights, talk_topics"
+            "id, video_id, title, stream_date, started_at, summary, tags, corner_names, guests, songs, talk_topics"
         ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("started_at", nullsfirst=False).execute()
     except Exception:
         streams_res = sb.table("streams").select(
-            "id, video_id, title, stream_date, summary, tags, corner_names, guests, songs, highlights, talk_topics"
+            "id, video_id, title, stream_date, summary, tags, corner_names, guests, songs, talk_topics"
         ).gte("stream_date", monday.isoformat()).lte("stream_date", sunday.isoformat()).order("stream_date").execute()
 
     streams = streams_res.data
@@ -516,7 +486,6 @@ def generate_magazine(target_date: date = None, force: bool = False):
             "guests": s.get("guests") or [],
             "songs": s.get("songs") or [],
             "talk_topics": s.get("talk_topics") or [],
-            "highlights": s.get("highlights") or [],
         })
 
     prompt = MAGAZINE_PROMPT.format(
@@ -539,7 +508,7 @@ def generate_magazine(target_date: date = None, force: bool = False):
         raw = m.group(1).strip()
 
     content = json.loads(raw)
-    logger.info(f"[{label}] 生成完了: topics={len(content.get('topics', []))}, highlights={len(content.get('highlights', []))}")
+    logger.info(f"[{label}] 生成完了: topics={len(content.get('topics', []))}")
 
     stream_ids = [s["id"] for s in streams]
 

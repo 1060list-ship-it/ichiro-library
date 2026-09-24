@@ -17,13 +17,6 @@ import type { Entity } from '@/lib/types'
 // 型定義（kusanagiのstream_idsロジックと整合）
 // -----------------------------------------------------------------------
 
-type Highlight = {
-  video_id: string
-  quote: string
-  reason: string
-  start_sec: number
-}
-
 type Topic = {
   title: string
   body: string
@@ -39,7 +32,6 @@ type MagazineContent = {
   topics: Topic[]
   guests: string[]
   songs: Song[]
-  highlights: Highlight[]
   editor_note: string
 }
 
@@ -59,14 +51,6 @@ type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
 // -----------------------------------------------------------------------
 // 定数
 // -----------------------------------------------------------------------
-
-const REASON_COLORS: Record<string, string> = {
-  '笑い': 'bg-yellow-900/70 text-yellow-300',
-  '名言': 'bg-blue-900/70 text-blue-300',
-  '感動': 'bg-pink-900/70 text-pink-300',
-  '驚き': 'bg-orange-900/70 text-orange-300',
-  '神回': 'bg-purple-900/70 text-purple-300',
-}
 
 const LOAD_TIMEOUT_MS = 10000
 
@@ -102,116 +86,6 @@ function StreamSourceBadge({ title }: { title: string }) {
       <span className="text-gray-600 flex-shrink-0">配信</span>
       <span className="truncate">{title}</span>
     </span>
-  )
-}
-
-// -----------------------------------------------------------------------
-// ハイライトセクション
-// -----------------------------------------------------------------------
-
-function HighlightsSection({
-  highlights,
-  streamMap,
-  entities,
-}: {
-  highlights: Highlight[]
-  streamMap: Record<string, StreamInfo>
-  entities: LinkableEntity[]
-}) {
-  /**
-   * 配信タイトルでグルーピング。
-   * streamMapが空（kusanagiのstream取得前）なら全件フラット表示にフォールバック。
-   */
-  const hasStreamInfo = Object.keys(streamMap).length > 0
-
-  type Group = { videoId: string; streamTitle: string | null; items: Highlight[] }
-  const groups: Group[] = []
-
-  if (hasStreamInfo) {
-    const seen = new Map<string, Group>()
-    for (const h of highlights) {
-      if (!seen.has(h.video_id)) {
-        const g: Group = {
-          videoId: h.video_id,
-          streamTitle: streamMap[h.video_id]?.title ?? null,
-          items: [],
-        }
-        seen.set(h.video_id, g)
-        groups.push(g)
-      }
-      seen.get(h.video_id)!.items.push(h)
-    }
-  } else {
-    groups.push({ videoId: '', streamTitle: null, items: highlights })
-  }
-
-  return (
-    <section>
-      <SectionHeading>今週の盛り上がり</SectionHeading>
-      <div className="space-y-3">
-        {groups.map((group, gi) => (
-          <div key={gi} className="bg-gray-900 rounded-xl overflow-hidden">
-            {/* 配信タイトルヘッダー */}
-            {group.streamTitle && (
-              <div className="px-4 py-2.5 bg-gray-800/50 border-b border-gray-800/80">
-                <StreamSourceBadge title={group.streamTitle} />
-              </div>
-            )}
-
-            <div className="divide-y divide-gray-800/60">
-              {group.items.map((h, i) => {
-                const linkSec = Math.max(0, (h.start_sec || 0) - 30)
-                const url = `https://www.youtube.com/watch?v=${h.video_id}&t=${linkSec}`
-                const mm = Math.floor((h.start_sec || 0) / 60)
-                const ss = (h.start_sec || 0) % 60
-                const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
-
-                return (
-                  <div
-                    key={i}
-                    className="group px-4 py-3.5 hover:bg-gray-800/50 transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* タイムスタンプ */}
-                      <span className="text-xs text-gray-500 font-mono mt-0.5 flex-shrink-0 w-9 text-right">
-                        {timestamp}
-                      </span>
-
-                      {/* 感情ラベル */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${REASON_COLORS[h.reason] ?? 'bg-gray-800/80 text-gray-400'}`}>
-                        {h.reason}
-                      </span>
-
-                      {/* 発言内容 */}
-                      <span className="text-sm text-gray-200 leading-relaxed flex-1">
-                        「{linkifyBody(h.quote, entities)}」
-                      </span>
-
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0 mt-0.5"
-                      >
-                        YouTube
-                      </a>
-                    </div>
-
-                    {/* グルーピングなし時の出所表示（フォールバック） */}
-                    {!hasStreamInfo && streamMap[h.video_id]?.title && (
-                      <div className="mt-2 pl-12">
-                        <StreamSourceBadge title={streamMap[h.video_id].title} />
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-gray-700 mt-2 px-1">YouTubeリンクから該当シーンが開きます</p>
-    </section>
   )
 }
 
@@ -496,11 +370,6 @@ export default function MagazineWeekPage() {
               ))}
             </div>
           </section>
-        )}
-
-        {/* 盛り上がり */}
-        {content.highlights?.length > 0 && (
-          <HighlightsSection highlights={content.highlights} streamMap={streamMap} entities={entities} />
         )}
 
         {/* ゲスト */}

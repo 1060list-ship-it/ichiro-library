@@ -10,7 +10,7 @@ import { requireRole } from '@/lib/auth'
 import { normalizeSongTitle } from '@/lib/song-search'
 import { ADMIN_ENTITY_SELECT } from '@/lib/selects'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { Database, Highlight, SongMatchPreviewResult, Stream } from '@/lib/types'
+import type { Database, SongMatchPreviewResult, Stream } from '@/lib/types'
 
 
 export type AdminDashboardData = {
@@ -44,7 +44,6 @@ export type AdminEditableStream = Pick<
   | 'songs'
   | 'has_live_singing'
   | 'talk_topics'
-  | 'highlights'
 >
 
 export type AdminChapter = {
@@ -65,7 +64,6 @@ export type UpdateAdminStreamInput = {
   songs: string
   hasLiveSinging: boolean
   talkTopics: string
-  highlights: Highlight[]
   isReviewed: boolean
 }
 
@@ -118,7 +116,6 @@ export type PipelineJob = {
 
 type StreamUpdate = Database['public']['Tables']['streams']['Update']
 type ChapterInsert = Database['public']['Tables']['chapters']['Insert']
-type AdminStreamUpdate = StreamUpdate & { highlights?: Highlight[] | null }
 type SearchLogRow = Database['public']['Tables']['search_logs']['Row']
 type SearchLogQueryRow = Pick<SearchLogRow, 'query'>
 type SearchLogDateRow = Pick<SearchLogRow, 'searched_at'>
@@ -138,7 +135,6 @@ const ADMIN_STREAM_SELECT_BASE = `
   guests,
   songs,
   has_live_singing,
-  highlights,
   talk_topics
 `
 
@@ -590,13 +586,12 @@ export async function updateAdminStream(input: UpdateAdminStreamInput): Promise<
 
   logAdminTagUpdateDrops(tagUpdate, input.videoId)
 
-  const updates: AdminStreamUpdate = {
+  const updates: StreamUpdate = {
     summary: input.summary.trim() || null,
     corner_names: normalizeCsv(input.cornerNames),
     guests: normalizeCsv(input.guests),
     songs: normalizeCsv(input.songs),
     has_live_singing: input.hasLiveSinging,
-    highlights: input.highlights.length > 0 ? input.highlights : null,
     talk_topics: normalizeCsv(input.talkTopics),
     is_reviewed: input.isReviewed,
   }

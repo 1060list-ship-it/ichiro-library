@@ -23,7 +23,6 @@ export const PUBLIC_STREAM_DETAIL_SELECT = [
   'tags',
   'corner_names',
   'guests',
-  'highlights',
 ].join(', ')
 
 export const PUBLIC_STREAM_LIST_SELECT = [

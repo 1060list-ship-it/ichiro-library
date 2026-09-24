@@ -12,56 +12,12 @@ import {
   PUBLIC_ENTITY_LINK_SELECT,
   PUBLIC_STREAM_DETAIL_SELECT,
 } from '@/lib/selects'
-import type { Stream, Chapter, Highlight, Entity } from '@/lib/types'
+import type { Stream, Chapter, Entity } from '@/lib/types'
 import ChapterList from '@/components/ChapterList'
 
-const REASON_COLORS: Record<string, string> = {
-  '笑い':  'bg-yellow-900 text-yellow-300',
-  '名言':  'bg-blue-900 text-blue-300',
-  '感動':  'bg-pink-900 text-pink-300',
-  '驚き':  'bg-orange-900 text-orange-300',
-  '神回':  'bg-purple-900 text-purple-300',
-}
-
-type StreamDetail = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'summary' | 'tags' | 'corner_names' | 'guests' | 'highlights'>
+type StreamDetail = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'summary' | 'tags' | 'corner_names' | 'guests'>
 type ChapterListItem = Pick<Chapter, 'id' | 'start_sec' | 'title' | 'summary'>
 type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
-
-function HighlightList({ highlights, videoId, entities }: { highlights: Highlight[]; videoId: string; entities: LinkableEntity[] }) {
-  return (
-    <div className="bg-gray-900 rounded-lg overflow-hidden">
-      <div className="flex items-baseline gap-2 px-4 pt-4 pb-2">
-        <p className="text-xs text-gray-500 font-medium">盛り上がり</p>
-      </div>
-      <div className="divide-y divide-gray-800">
-        {highlights.map((h, i) => {
-          const mm = Math.floor(h.start_sec / 60)
-          const ss = h.start_sec % 60
-          const timestamp = `${mm}:${String(ss).padStart(2, '0')}`
-          const url = `https://www.youtube.com/watch?v=${videoId}&t=${h.start_sec}`
-          return (
-            <div key={i}
-              className="flex items-start gap-3 px-4 py-3 hover:bg-gray-800 transition-colors">
-              <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">{timestamp}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${REASON_COLORS[h.reason] ?? 'bg-gray-800 text-gray-300'}`}>
-                {h.reason}
-              </span>
-              <span className="text-sm text-gray-200 leading-snug flex-1">「{linkifyBody(h.quote, entities)}」</span>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0 mt-0.5"
-              >
-                YouTube
-              </a>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 const REPORT_STORAGE_PREFIX = 'ichiro_reported_'
 type ReportFailure = 'server' | 'storage' | null
@@ -253,11 +209,6 @@ export default function StreamPage() {
 
         {/* チャプター */}
         {chapters.length > 0 && <ChapterList chapters={chapters} videoId={stream.video_id} />}
-
-        {/* 盛り上がり */}
-        {stream.highlights && stream.highlights.length > 0 && (
-          <HighlightList highlights={stream.highlights} videoId={stream.video_id} entities={entities} />
-        )}
 
         <div className="border-t border-gray-800 pt-2">
           <a

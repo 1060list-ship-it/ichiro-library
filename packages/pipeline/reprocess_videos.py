@@ -473,7 +473,6 @@ def reprocess_one(
         "songs":          ai_result.get("songs", []),
         "talk_topics":    ai_result.get("talk_topics", []),
         "has_live_singing": ai_result.get("has_live_singing", False),
-        "highlights":     ai_result.get("highlights", []),
         "ai_model":       MODEL_NAME,
         "ai_prompt_ver":  TARGET_PROMPT_VER,
     }

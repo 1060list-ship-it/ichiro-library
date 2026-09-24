@@ -286,7 +286,6 @@ def make_ai_result(chapters=None, **overrides):
         "songs": [],
         "talk_topics": [],
         "has_live_singing": False,
-        "highlights": [],
     }
     result.update(overrides)
     return result

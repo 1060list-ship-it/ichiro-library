@@ -56,7 +56,7 @@ def _stringify(value: Any) -> str:
 def stream_text(stream: dict) -> str:
     return "\n".join(
         _stringify(stream.get(key))
-        for key in ("title", "summary", "talk_topics", "guests", "songs", "highlights")
+        for key in ("title", "summary", "talk_topics", "guests", "songs")
     )
 
 
@@ -114,7 +114,7 @@ def save_magazine_entities(client: Client, magazine_id: str, entity_ids: list[st
 
 def backfill_streams(client: Client, entities: list[dict], dry_run: bool = False) -> int:
     response = client.table("streams").select(
-        "id, title, summary, talk_topics, guests, songs, highlights"
+        "id, title, summary, talk_topics, guests, songs"
     ).execute()
     streams = response.data or []
     total_links = 0

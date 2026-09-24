@@ -121,6 +121,5 @@ def test_reprocess_one_empty_chapters_from_ai_still_updates_stream_without_calli
     payload = stream_updates[0]["payload"]
     assert payload["summary"] == "要約テキスト"
     assert payload["tags"] == []
-    assert payload["highlights"] == []
     assert payload["ai_model"] == reprocess_videos.MODEL_NAME
     assert payload["ai_prompt_ver"] == reprocess_videos.TARGET_PROMPT_VER

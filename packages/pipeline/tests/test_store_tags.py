@@ -51,6 +51,27 @@ def _find_tags_example_index(lines: list[str]) -> int:
     return matches[0]
 
 
+def _strip_highlights_section(lines: list[str]) -> list[str]:
+    start = _find_heading(lines, "### 9. highlights（盛り上がりの瞬間）")
+    end = _find_heading(lines, "## 固有名詞辞書（字幕の誤変換補正用）")
+    return lines[:start] + lines[end:]
+
+
+def _strip_highlights_example(lines: list[str]) -> list[str]:
+    start = next(i for i, line in enumerate(lines) if line.strip() == '"highlights": [')
+    end = next(i for i in range(start, len(lines)) if lines[i].strip() == "]")
+    result = lines[:start] + lines[end + 1:]
+
+    for i in range(start - 1, -1, -1):
+        if result[i].strip().startswith('"talk_topics":'):
+            result[i] = result[i].rstrip().rstrip(",")
+            break
+    else:
+        raise AssertionError("talk_topics example line not found before highlights block")
+
+    return result
+
+
 def _extract_v4_tag_section_slugs(lines: list[str]) -> set[str]:
     start = _find_heading(lines, "### 5. tags（タグ）")
     end = _find_heading(lines, "### 6. songs（登場した楽曲名）")
@@ -200,8 +221,8 @@ def test_v4_prompt_tag_section_contains_expected_25_slugs():
     assert _extract_v4_tag_section_slugs(v4_lines) == EXPECTED_V4_SLUGS
 
 
-def test_v4_prompt_diff_is_limited_to_tag_section_and_example_tags_line():
-    v3_lines = _read_prompt("v3.txt")
+def test_v4_prompt_diff_is_limited_to_tag_section_tags_line_and_highlights_removal():
+    v3_lines = _strip_highlights_section(_read_prompt("v3.txt"))
     v4_lines = _read_prompt("v4.txt")
 
     v3_tag_start = _find_heading(v3_lines, "### 5. tags（タグ）")
@@ -211,7 +232,7 @@ def test_v4_prompt_diff_is_limited_to_tag_section_and_example_tags_line():
 
     assert v3_lines[:v3_tag_start] == v4_lines[:v4_tag_start]
 
-    v3_suffix = v3_lines[v3_song_start:]
+    v3_suffix = _strip_highlights_example(v3_lines[v3_song_start:])
     v4_suffix = v4_lines[v4_song_start:]
     v3_tags_line = _find_tags_example_index(v3_suffix)
     v4_tags_line = _find_tags_example_index(v4_suffix)

@@ -185,7 +185,6 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         row["songs"]           = ai_result.get("songs", [])
         row["has_live_singing"] = ai_result.get("has_live_singing", False)
         row["talk_topics"]     = ai_result.get("talk_topics", [])
-        row["highlights"]      = ai_result.get("highlights", [])
 
     if is_review_locked and existing:
         for field in _REVIEW_LOCKED_FIELDS:

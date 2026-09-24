@@ -47,7 +47,6 @@ def test_video_force_reviewed_row_omits_review_locked_fields(monkeypatch, fake_s
         songs=["手動曲"],
         has_live_singing=True,
         talk_topics=["手動トピック"],
-        highlights=["旧ハイライト"],
     )
     fake_supabase.seed("streams", row)
 
@@ -59,7 +58,6 @@ def test_video_force_reviewed_row_omits_review_locked_fields(monkeypatch, fake_s
         songs=["AI曲"],
         has_live_singing=False,
         talk_topics=["AIトピック"],
-        highlights=["新ハイライト"],
     )
     monkeypatch.setattr(
         reprocess_videos,
@@ -82,7 +80,6 @@ def test_video_force_reviewed_row_omits_review_locked_fields(monkeypatch, fake_s
     for field in _REVIEW_LOCKED_FIELDS:
         assert field not in payload
 
-    assert payload["highlights"] == ["新ハイライト"]
     assert payload["ai_model"] == reprocess_videos.MODEL_NAME
     assert payload["ai_prompt_ver"] == reprocess_videos.TARGET_PROMPT_VER
 
@@ -94,4 +91,3 @@ def test_video_force_reviewed_row_omits_review_locked_fields(monkeypatch, fake_s
     assert updated_row["songs"] == ["手動曲"]
     assert updated_row["has_live_singing"] is True
     assert updated_row["talk_topics"] == ["手動トピック"]
-    assert updated_row["highlights"] == ["新ハイライト"]
