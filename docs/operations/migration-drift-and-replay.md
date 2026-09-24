@@ -63,34 +63,46 @@ Supabase Management API `GET /v1/projects/{ref}/database/migrations` を呼び�
 - `duplicates`: 同一version prefixのローカルファイルが複数
 - `unparsable`: 数字prefixが無い `.sql`
 
+`remote_only` については、同名のローカルファイルがある場合に
+`GET /v1/projects/{ref}/database/migrations/{version}` の `statements` とローカルファイル内容を
+正規化（コメント行・空白・末尾セミコロンの差を無視）して比較し、`match` / `differs` / `unavailable` を表示する。
+`match` は「ローカルfilenameを本番versionに合わせれば整合する」ことの判断材料になる。
+
+`supabase/local-only-migrations.txt` に列挙したversionは「意図的なローカル専用migration」として
+ドリフト判定から除外し、レポートには理由付きの既知例外として表示する。追記時は
+「なぜ本番へ適用しないのか・本番側の状態」を併記する。
+
 週次（月曜 09:00 JST）+ 手動（workflow_dispatch）で実行し、ドリフトがあればworkflowが失敗する。
 
 ### 必要な設定（初回のみ・Owner作業）
 
-1. Supabaseで `database` 読み取り権限のアクセストークンを発行する
+1. Supabaseで `Migrations` の **Read** 権限（対象プロジェクト限定のスコープ付きトークン推奨）を発行する
 2. GitHub リポジトリ `1060list-ship-it/ichiro-library` の Secrets に `SUPABASE_ACCESS_TOKEN` を登録する
 3. （任意）Variables に `SUPABASE_PROJECT_REF` を登録する（未設定時は既定値 `tpgmbulgebcrmzbjvzwj`）
 4. Actions タブから `Migration Drift Check` を `workflow_dispatch` で1回実行し、初回baselineを確認する
 
 トークンが未登録の場合、workflowは「アクセストークンがありません」で失敗する（安全側）。
+トークンには有効期限があるため、期限切れ前に再発行してSecretsを更新する（値はUIで一度しか表示されない）。
 
 ### ローカル実行
 
 ```bash
 SUPABASE_ACCESS_TOKEN=<token> python3 scripts/check_migration_drift.py \
   --project-ref tpgmbulgebcrmzbjvzwj \
-  --local-dir supabase/migrations
+  --local-dir supabase/migrations \
+  --local-only-file supabase/local-only-migrations.txt
 ```
 
-終了コード: `0` ドリフトなし / `1` ドリフト検出 / `2` 実行不能（トークン・API・ネットワーク）
+終了コード: `0` ドリフトなし（既知例外のみ） / `1` ドリフト検出 / `2` 実行不能（トークン・API・ネットワーク）
 
 ユニットテスト: `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`
 
 ## 3. ドリフト検出時の対応方針
 
-- `remote_only`: 本番で何が行われたかを確認し、ローカルファイル化するか履歴をどう扱うかを一幾判断で決める（`supabase migration repair` は本番履歴への書き込みのため、従来どおり明示承認が必要）
-- `local_only`: 未適用のまま放置してよいか、本番適用が必要かを確認する
+- `remote_only`: レポートの内容比較が `match` なら、ローカルfilenameを**本番記録済みversionへrename**して整合させる（例: `20260718100000_034_drop_live_viewing_flag.sql` → `20260718024607_034_drop_live_viewing_flag.sql`。内容を変えずprefixのみ変更する）。`differs` の場合はrenameせず、本番で何が適用されたかを確認して一幾判断を仰ぐ。`supabase migration repair` は本番履歴への書き込みのため、従来どおり明示承認が必要
+- `local_only`: 本番適用が必要か、`supabase/local-only-migrations.txt` へ既知例外として登録すべきかを確認する
 - `duplicates`: `docs/audit/2026-06-24-migration-status.md` の原則（本番に記録済みのversionにローカルfilenameを合わせる）に反していないか確認する
+
 
 ## 関連
 

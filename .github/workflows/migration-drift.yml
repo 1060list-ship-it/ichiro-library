@@ -43,4 +43,5 @@ jobs:
           set -o pipefail
           python3 scripts/check_migration_drift.py \
             --project-ref "${{ vars.SUPABASE_PROJECT_REF || 'tpgmbulgebcrmzbjvzwj' }}" \
-            --local-dir supabase/migrations | tee -a "$GITHUB_STEP_SUMMARY"
+            --local-dir supabase/migrations \
+            --local-only-file supabase/local-only-migrations.txt | tee -a "$GITHUB_STEP_SUMMARY"
