@@ -329,9 +329,10 @@ export default function HomePageClient({
               </div>
               <div className="space-y-1.5">
                 <p className="font-semibold text-gray-300">日付・期間検索</p>
-                <p>「2026年2月」のように入力すると、その月の配信に絞り込まれます。キーワードと組み合わせも可能です。</p>
+                <p>「2026年2月」「2026-02-14」のように入力すると、その月・日の配信に絞り込まれます。キーワードと組み合わせも可能です。</p>
                 <div className="space-y-0.5 font-mono text-gray-500">
                   <p><span className="text-gray-300">2026年2月</span> → 2月の配信一覧</p>
+                  <p><span className="text-gray-300">2026-02-14</span> → 2月14日の配信</p>
                   <p><span className="text-gray-300">2026年2月 浜田</span> → 2月 × 浜田</p>
                 </div>
               </div>

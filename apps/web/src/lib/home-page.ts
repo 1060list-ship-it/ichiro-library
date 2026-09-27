@@ -130,14 +130,47 @@ function applyCardFilter(query: any, filter: ActiveCardFilter | null) {
 export function parseJapaneseDateFromQuery(q: string): {
   year: number | null
   month: number | null
+  day: number | null
   remaining: string
   label: string | null
 } {
+  const isoFullMatch = q.match(/(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/)
+  if (isoFullMatch) {
+    const year = Number.parseInt(isoFullMatch[1], 10)
+    const month = Number.parseInt(isoFullMatch[2], 10)
+    const day = Number.parseInt(isoFullMatch[3], 10)
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return {
+        year,
+        month,
+        day,
+        remaining: q.replace(isoFullMatch[0], '').trim(),
+        label: `${year}年${month}月${day}日`,
+      }
+    }
+  }
+
+  const isoYmMatch = q.match(/(\d{4})[/\-.](\d{1,2})/)
+  if (isoYmMatch) {
+    const year = Number.parseInt(isoYmMatch[1], 10)
+    const month = Number.parseInt(isoYmMatch[2], 10)
+    if (month >= 1 && month <= 12) {
+      return {
+        year,
+        month,
+        day: null,
+        remaining: q.replace(isoYmMatch[0], '').trim(),
+        label: `${year}年${month}月`,
+      }
+    }
+  }
+
   const ymMatch = q.match(/(\d{4})年(\d{1,2})月/)
   if (ymMatch) {
     return {
       year: Number.parseInt(ymMatch[1], 10),
       month: Number.parseInt(ymMatch[2], 10),
+      day: null,
       remaining: q.replace(ymMatch[0], '').trim(),
       label: `${ymMatch[1]}年${ymMatch[2]}月`,
     }
@@ -148,12 +181,13 @@ export function parseJapaneseDateFromQuery(q: string): {
     return {
       year: Number.parseInt(yMatch[1], 10),
       month: null,
+      day: null,
       remaining: q.replace(yMatch[0], '').trim(),
       label: `${yMatch[1]}年`,
     }
   }
 
-  return { year: null, month: null, remaining: q, label: null }
+  return { year: null, month: null, day: null, remaining: q, label: null }
 }
 
 export async function fetchHomePageMeta(
@@ -190,11 +224,16 @@ export async function fetchHomePageStreams(
   const textQuery = parsed.remaining
   const effectiveYear = parsed.year ?? year
   const effectiveMonth = parsed.month
+  const effectiveDay = parsed.day
 
   let dateFrom: string | null = null
   let dateTo: string | null = null
 
-  if (effectiveYear !== null && effectiveMonth !== null) {
+  if (effectiveYear !== null && effectiveMonth !== null && effectiveDay !== null) {
+    dateFrom = `${effectiveYear}-${String(effectiveMonth).padStart(2, '0')}-${String(effectiveDay).padStart(2, '0')}`
+    const next = new Date(Date.UTC(effectiveYear, effectiveMonth - 1, effectiveDay + 1))
+    dateTo = next.toISOString().slice(0, 10)
+  } else if (effectiveYear !== null && effectiveMonth !== null) {
     dateFrom = `${effectiveYear}-${String(effectiveMonth).padStart(2, '0')}-01`
     const nextMonth = effectiveMonth === 12 ? 1 : effectiveMonth + 1
     const nextYear = effectiveMonth === 12 ? effectiveYear + 1 : effectiveYear
