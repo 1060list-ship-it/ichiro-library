@@ -60,7 +60,7 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
     ai_result = None
 
     if transcript_result.source != "failed" and timestamped_text:
-        ai_result = summarize(timestamped_text, model=gemini_model)
+        ai_result = summarize(timestamped_text, model=gemini_model, stream_date=video_meta.get("stream_date"))
     else:
         logger.warning(f"[{video_id}] 字幕なしのためAI要約をスキップ")
 

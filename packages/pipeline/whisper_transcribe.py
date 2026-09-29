@@ -209,7 +209,7 @@ def transcribe_and_store(
     from store import upsert_stream, insert_chapters, save_transcript_snapshot
 
     timestamped_text = build_timestamped_text(snippets)
-    ai_result = summarize(timestamped_text, model=gemini)
+    ai_result = summarize(timestamped_text, model=gemini, stream_date=video_meta.get("stream_date"))
 
     stream_id, is_review_locked = upsert_stream(
         client=supabase_client,

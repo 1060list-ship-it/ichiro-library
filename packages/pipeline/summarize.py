@@ -7,6 +7,7 @@ import re
 import json
 import logging
 from collections import OrderedDict
+from datetime import date as _date, datetime as _dt
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,63 @@ PROMPT_PATH = Path(__file__).parent / "prompts" / f"{TARGET_PROMPT_VER}.txt"
 SONG_CATALOG_PATH = Path(__file__).parent / "prompts" / "song_catalog.txt"
 SONGS_SQL_PATH = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "013_songs.sql"
 MODEL_NAME = "gemini-2.5-flash"
+
+WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
+
+# summary冒頭文で「当日の日付を指す」とみなす表現。未来のイベント告知との誤検知を避けるため、
+# 「配信」等の配信自称動詞と結合した形のみを対象にする。
+# 日跨ぎ配信（stream_date が前日付け・タイトルが当日付け）が日常的なため、前後1日のずれは許容する。
+_MD_SELF_PAT = re.compile(r"(\d{1,2})月(\d{1,2})日(?:の[^。、]{0,15}?(?:配信|スタート|始ま)|(?:深夜)?に(?:行われた|配信された|始まった|スタート))")
+_FULL_DATE_PAT = re.compile(r"20(\d{2})年(\d{1,2})月(\d{1,2})日")
+_SELF_VERB_PAT = re.compile(r"配信|スタート|始ま|行わ|幕を開|ライブは|ライブが")
+
+
+def _coerce_stream_date(stream_date) -> Optional[_date]:
+    if stream_date is None:
+        return None
+    if isinstance(stream_date, _dt):
+        return stream_date.date()
+    if isinstance(stream_date, _date):
+        return stream_date
+    try:
+        return _date.fromisoformat(str(stream_date)[:10])
+    except ValueError:
+        return None
+
+
+def validate_summary_dates(summary: str, stream_date) -> list[str]:
+    """要約冒頭文の日付が配信日と矛盾していないか検査する。問題がなければ []。
+
+    2026-09-29 の全319件横断チェックで見つかった誤りパターン（年号ずれ・月日ずれ）が対象。
+    未来イベントの告知（「3月16日に解禁」「2026年元旦」「2025年度」等）は誤検知しない。
+    日跨ぎ配信が日常的なため、前後1日のずれは許容する。
+    """
+    from datetime import timedelta as _td
+    issues: list[str] = []
+    day = _coerce_stream_date(stream_date)
+    if day is None or not summary:
+        return issues
+    first = re.split(r"。", summary)[0]
+    allowed = {day + _td(days=d) for d in (-1, 0, 1)}
+
+    def _candidate(y: int, mo: int, da: int):
+        try:
+            return _date(y, mo, da)
+        except ValueError:
+            return None
+
+    if _SELF_VERB_PAT.search(first):
+        for m in _FULL_DATE_PAT.finditer(first):
+            cand = _candidate(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if cand is not None and cand not in allowed:
+                issues.append(f"冒頭文の日付 {m.group(0)} が配信日 {day.isoformat()} と不一致")
+
+    for m in _MD_SELF_PAT.finditer(first):
+        cand = _candidate(day.year, int(m.group(1)), int(m.group(2)))
+        if cand is not None and cand not in allowed:
+            issues.append(f"冒頭文の日付 {m.group(0)[:20]}… が配信日 {day.isoformat()} と不一致")
+
+    return issues
 
 
 def get_gemini_client():
@@ -137,10 +195,13 @@ def summarize(
     transcript_text: str,
     model=None,
     *,
+    stream_date=None,
     reraise_resource_exhausted: bool = False,
 ) -> Optional[dict]:
     """
     字幕テキストを受け取り、構造化データ（dict）を返す。
+    stream_date（YYYY-MM-DD 文字列 / date / datetime）を渡すと、
+    プロンプトに配信日を注入し、生成後の冒頭文の日付矛盾を警告ログで検知する。
     失敗時は None を返す。
     """
     if not transcript_text.strip():
@@ -150,12 +211,23 @@ def summarize(
     if model is None:
         model = get_gemini_client()
 
+    day = _coerce_stream_date(stream_date)
     prompt_template = PROMPT_PATH.read_text(encoding="utf-8")
     prompt = (
         prompt_template
         .replace("{song_catalog}", _load_song_catalog_text())
         .replace("{transcript}", transcript_text)
     )
+    if day is not None:
+        wd = WEEKDAYS_JA[day.weekday()]
+        date_block = (
+            f"## 配信日（厳守）\n"
+            f"この配信の日付は{day.year}年{day.month}月{day.day}日（{wd}曜日）です。\n"
+            f"summaryの冒頭で配信当日の日付に触れる場合は、必ずこの日付と一致させ、"
+            f"他の年・月・日を書かないでください。"
+            f"未来のイベント告知で別の日付に触れる場合は、配信当日と区別できる書き方にしてください。\n\n"
+        )
+        prompt = date_block + prompt
 
     try:
         response = _generate_with_retry(model, prompt)
@@ -168,6 +240,9 @@ def summarize(
 
         result = json.loads(raw, strict=False)
         _validate_result(result)
+        if day is not None:
+            for issue in validate_summary_dates(result.get("summary", ""), day):
+                logger.warning(f"要約の日付検証: {issue}")
         logger.info(f"Gemini 要約完了: chapters={len(result.get('chapters', []))}, tags={result.get('tags', [])}")
         return result
 

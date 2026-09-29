@@ -435,6 +435,7 @@ def reprocess_one(
     ai_result = summarize(
         summary_input or "",
         model=gemini,
+        stream_date=row.get("stream_date"),
         reraise_resource_exhausted=True,
     )
 
