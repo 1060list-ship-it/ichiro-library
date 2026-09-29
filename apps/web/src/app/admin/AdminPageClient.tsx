@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob, SearchLogStats } from './actions'
+import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob, SearchLogPeriod, SearchLogStats } from './actions'
 import {
   cancelPipelineJob,
   clearFinishedJobs,
+  fetchSearchLogStats,
   deletePipelineJob,
   enqueueJob,
   fetchAdminDashboard,
@@ -318,6 +319,28 @@ export default function AdminPageClient({
   const [bookmarksLoading, setBookmarksLoading] = useState(true)
   const [bookmarksError, setBookmarksError] = useState('')
   const [showAllUnreviewed, setShowAllUnreviewed] = useState(false)
+  const [statsPeriod, setStatsPeriod] = useState<SearchLogPeriod>('all')
+  const [searchLogStats, setSearchLogStats] = useState<SearchLogStats>(initialSearchLogStats)
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [statsPeriodError, setStatsPeriodError] = useState<string | null>(null)
+
+  const changeStatsPeriod = async (period: SearchLogPeriod) => {
+    if (period === statsPeriod || statsLoading) {
+      return
+    }
+
+    setStatsPeriod(period)
+    setStatsLoading(true)
+    setStatsPeriodError(null)
+
+    try {
+      setSearchLogStats(await fetchSearchLogStats(period))
+    } catch {
+      setStatsPeriodError('期間別の集計取得に失敗しました。')
+    } finally {
+      setStatsLoading(false)
+    }
+  }
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -946,14 +969,40 @@ export default function AdminPageClient({
               <div className="grid gap-6 px-5 py-5 lg:grid-cols-2">
                 <div className="rounded-xl border border-gray-800 bg-gray-950/50">
                   <div className="border-b border-gray-800 px-4 py-3">
-                    <h3 className="text-sm font-semibold text-white">上位検索ワード（Top 20）</h3>
-                    <p className="mt-1 text-xs text-gray-500">同一クエリを集計した件数順</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-white">上位検索ワード（Top 20）</h3>
+                      <div className="flex gap-1 text-xs">
+                        {([
+                          { key: 'week', label: '7日間' },
+                          { key: 'month', label: '30日間' },
+                          { key: 'all', label: '全期間' },
+                        ] as const).map((tab) => (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => changeStatsPeriod(tab.key)}
+                            disabled={statsLoading}
+                            aria-pressed={statsPeriod === tab.key}
+                            className={`rounded-md px-2.5 py-1 transition-colors ${
+                              statsPeriod === tab.key
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">日付などの表記ゆれを束ねて集計した件数順</p>
                   </div>
 
-                  {searchLogStatsError ? (
-                    <p className="px-4 py-4 text-sm text-red-400">{searchLogStatsError}</p>
-                  ) : initialSearchLogStats.topQueries.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-gray-500">検索ログはまだありません。</p>
+                  {searchLogStatsError ?? statsPeriodError ? (
+                    <p className="px-4 py-4 text-sm text-red-400">{searchLogStatsError ?? statsPeriodError}</p>
+                  ) : searchLogStats.topQueries.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-gray-500">
+                      {statsLoading ? '集計中…' : '検索ログはまだありません。'}
+                    </p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-800 text-sm">
@@ -964,9 +1013,16 @@ export default function AdminPageClient({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
-                          {initialSearchLogStats.topQueries.map((item) => (
+                          {searchLogStats.topQueries.map((item) => (
                             <tr key={item.query}>
-                              <td className="px-4 py-3 text-gray-200">{item.query}</td>
+                              <td className="max-w-[240px] px-4 py-3">
+                                <span
+                                  className="block truncate text-gray-200"
+                                  title={item.samples.length > 1 ? `表記ゆれ: ${item.samples.join(' / ')}` : item.query}
+                                >
+                                  {item.query}
+                                </span>
+                              </td>
                               <td className="px-4 py-3 text-right text-gray-300">{item.count.toLocaleString()}</td>
                             </tr>
                           ))}
