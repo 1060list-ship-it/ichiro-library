@@ -70,8 +70,8 @@ function withTimeout<T>(promise: PromiseLike<T>, message: string): Promise<T> {
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-4">
-      <div className="w-0.5 h-4 bg-indigo-500 rounded-full flex-shrink-0" />
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{children}</h2>
+      <div className="h-4 w-0.5 shrink-0 rounded-full bg-[var(--aqua)]" />
+      <h2 className="text-xs font-semibold tracking-widest text-[var(--muted)]">{children}</h2>
     </div>
   )
 }
@@ -82,8 +82,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 function StreamSourceBadge({ title }: { title: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-800/80 px-2 py-0.5 rounded-md max-w-full">
-      <span className="text-gray-600 flex-shrink-0">配信</span>
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--line)] px-2 py-0.5 text-xs text-[var(--muted)]">
+      <span className="shrink-0 text-[var(--muted)]">配信</span>
       <span className="truncate">{title}</span>
     </span>
   )
@@ -117,7 +117,7 @@ function SongsSection({
         </SectionHeading>
       </button>
       {open && (
-        <div className="bg-gray-900 rounded-xl overflow-hidden divide-y divide-gray-800/60">
+        <div className="divide-y divide-[var(--line)] overflow-hidden rounded-2xl bg-[var(--surface)]">
           {songs.map((s, i) => {
             const title = typeof s === 'string' ? s : s.title
             const videoId = typeof s === 'string' ? undefined : s.video_id
@@ -129,12 +129,12 @@ function SongsSection({
             const inner = (
               <div className="flex items-center gap-3 px-4 py-3">
                 {/* 曲番号 */}
-                <span className="text-xs text-gray-600 font-mono w-5 flex-shrink-0 text-right">
+                <span className="w-5 shrink-0 text-right font-mono text-xs text-[var(--muted)]">
                   {i + 1}
                 </span>
                 {/* 曲名 */}
                 <div className="flex-1 min-w-0 space-y-0.5">
-                  <p className="text-sm text-gray-200 leading-snug">{linkifyBody(title, entities)}</p>
+                  <p className="text-sm leading-snug text-[var(--ink)]">{linkifyBody(title, entities)}</p>
                   {streamTitle && (
                     <StreamSourceBadge title={streamTitle} />
                   )}
@@ -145,7 +145,7 @@ function SongsSection({
                     href={youtubeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex-shrink-0"
+                    className="shrink-0 text-xs text-[var(--aqua)]"
                   >
                     YouTube
                   </a>
@@ -153,7 +153,7 @@ function SongsSection({
               </div>
             )
 
-            return <div key={i} className="hover:bg-gray-800/50 transition-colors">{inner}</div>
+            return <div key={i} className="transition hover:bg-[var(--surface-raised)]">{inner}</div>
           })}
         </div>
       )}
@@ -255,7 +255,7 @@ export default function MagazineWeekPage() {
   }, [week])
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">
       <div className="text-center space-y-3">
         <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="text-xs text-gray-600">読み込み中</p>
@@ -264,7 +264,7 @@ export default function MagazineWeekPage() {
   )
 
   if (!magazine) return (
-    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">
       <div className="text-center space-y-3">
         {error ? (
           <>
@@ -286,18 +286,16 @@ export default function MagazineWeekPage() {
   const precomposedCover = hasLocalMagazineCover(magazine.week_label) || magazine.cover_image_url !== null
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen bg-[var(--canvas)] text-[var(--ink)]">
 
       {/* ヘッダーナビ（スクロールしても残る） */}
-      <header className="border-b border-gray-800/80 px-4 py-4 flex items-center justify-between sticky top-0 bg-gray-950/90 backdrop-blur-sm z-10">
-        <Link href="/magazine" className="text-gray-400 hover:text-white text-sm transition-colors">
+      <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6">
+        <Link href="/magazine" className="inline-flex min-h-11 items-center text-sm text-[var(--muted)] transition hover:text-[var(--ink)]">
           ← バックナンバー
         </Link>
-        <span className="text-xs text-gray-500">いっくん追いかけマガジン</span>
-        <div className="w-24" />
-      </header>
+      </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-10">
+      <div className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:px-6">
 
         {/* カバー画像 */}
         <div className="relative mx-auto w-full max-w-md aspect-[210/297] rounded-sm overflow-hidden bg-neutral-100 shadow-2xl shadow-black/40 ring-1 ring-white/10">

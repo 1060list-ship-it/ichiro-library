@@ -101,8 +101,8 @@ export default function StreamPage() {
     }
   }
 
-  if (loading) return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">読み込み中...</div>
-  if (!stream) return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">配信が見つかりません</div>
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">読み込み中...</div>
+  if (!stream) return <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">配信が見つかりません</div>
 
   const date = new Date(stream.stream_date).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -110,40 +110,23 @@ export default function StreamPage() {
   const youtubeUrl = `https://www.youtube.com/watch?v=${stream.video_id}`
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      <header className="border-b border-gray-800 px-4 py-4">
-        <Link href="/" className="text-gray-400 hover:text-white text-sm">← 一覧に戻る</Link>
-      </header>
-
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        {/* YouTube埋め込み */}
-        <div className="aspect-video w-full">
+    <main className="min-h-screen bg-[var(--canvas)] text-[var(--ink)]">
+      <div className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:px-6 sm:py-14">
+        <Link href="/" className="inline-flex min-h-11 items-center text-sm text-[var(--muted)] transition hover:text-[var(--ink)]">← 配信一覧に戻る</Link>
+        <div className="space-y-4">
+          <p className="font-mono text-xs tabular-nums text-[var(--muted)]">{date}{stream.duration_min != null && ` / ${stream.duration_min}分`}{stream.view_count != null && ` / 再生 ${stream.view_count.toLocaleString()}`}</p>
+          <h1 className="text-2xl font-semibold leading-snug tracking-[-0.02em] sm:text-4xl">{stream.title}</h1>
+          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--signal)] px-5 text-sm font-semibold text-[#08111D] transition hover:brightness-110">YouTubeでこの配信を開く ↗</a>
+        </div>
+        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-[var(--line)]">
           <iframe
             src={`https://www.youtube.com/embed/${stream.video_id}`}
-            className="w-full h-full rounded-lg"
+            title={stream.title}
+            className="h-full w-full"
             allowFullScreen
           />
         </div>
-
-        {/* メタデータ */}
-        <div className="space-y-2">
-          <p className="text-sm text-gray-400">{date}</p>
-          <h1 className="text-lg font-bold leading-snug">{stream.title}</h1>
-          <div>
-            <a
-              href={youtubeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-950 transition hover:bg-gray-200"
-            >
-              YouTubeで全部見る ↗
-            </a>
-          </div>
-          <div className="flex gap-4 text-sm text-gray-400">
-            {stream.view_count && <span>再生 {stream.view_count.toLocaleString()}</span>}
-            {stream.duration_min && <span>{stream.duration_min}分</span>}
-          </div>
-        </div>
+        <div className="space-y-2 text-sm leading-7 text-[var(--muted)]"><p>このページは配信を探すための案内です。続きはYouTubeで。</p><a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--aqua)]">YouTubeで続きから見る ↗</a></div>
 
         {/* タグ */}
         {(() => {
@@ -158,20 +141,20 @@ export default function StreamPage() {
                 <Link
                   key={cornerName}
                   href={`/?corner=${encodeURIComponent(cornerName)}`}
-                  className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full"
+                  className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
                 >
                   {cornerName}
                 </Link>
               ))}
               {stream.guests?.map((guest) => (
-                <span key={guest} className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">{linkifyExact(guest, entities)}</span>
+                <span key={guest} className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)]">{linkifyExact(guest, entities)}</span>
               ))}
               {/* Phase 2でタグ絞り込みを実装する際は、生のtag値ではなくslug正規化したキーで統一すること（レガシー日本語タグとの分裂を防ぐ） */}
               {tagsOnly.map((tag) => (
                 <Link
                   key={tag}
                   href={`/?tag=${encodeURIComponent(tag)}`}
-                  className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full"
+                  className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
                 >
                   {getTagLabel(tag)}
                 </Link>
@@ -180,44 +163,45 @@ export default function StreamPage() {
           )
         })()}
 
-        {/* AI要約 */}
         {stream.summary && (
-          <div className="bg-gray-900 rounded-lg p-4 space-y-1">
-            <p className="text-xs text-gray-500 font-medium">AI要約</p>
-            <p className="text-sm text-gray-200 leading-relaxed">{linkifyBody(stream.summary, entities)}</p>
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">見どころ</h2>
+            <div className="space-y-1 rounded-2xl bg-[var(--surface)] p-4">
+            <p className="text-sm leading-7 text-[var(--ink)]">{linkifyBody(stream.summary, entities)}</p>
             <div className="pt-2 space-y-1">
               {!reported && !reporting && (
-                <p className="text-xs text-gray-500">要約が気になる場合はお知らせください。</p>
+                <p className="text-xs text-[var(--muted)]">要約が気になる場合はお知らせください。</p>
               )}
               {reportFailure === 'server' && (
-                <p role="alert" className="text-xs text-rose-300">送信に失敗しました。時間をおいて、もう一度お試しください。</p>
+                <p role="alert" className="text-xs text-[var(--signal)]">送信に失敗しました。時間をおいて、もう一度お試しください。</p>
               )}
               {reportFailure === 'storage' && (
-                <p role="alert" className="text-xs text-amber-300">依頼は送信されましたが、この端末には記録できませんでした。</p>
+                <p role="alert" className="text-xs text-[var(--muted)]">依頼は送信されましたが、この端末には記録できませんでした。</p>
               )}
               <button
                 type="button"
                 onClick={() => void handleReport()}
                 disabled={reported || reporting}
-                className="text-xs text-gray-500 transition hover:text-gray-300 disabled:text-gray-600 disabled:cursor-default"
+                className="min-h-11 text-xs text-[var(--muted)] transition hover:text-[var(--ink)] disabled:cursor-default disabled:opacity-50"
               >
                 {reported ? '依頼済み' : reporting ? '送信中...' : '修正を依頼する'}
               </button>
             </div>
-          </div>
+            </div>
+          </section>
         )}
 
         {/* チャプター */}
         {chapters.length > 0 && <ChapterList chapters={chapters} videoId={stream.video_id} />}
 
-        <div className="border-t border-gray-800 pt-2">
+        <div className="border-t border-[var(--line)] pt-8">
           <a
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center rounded-full border border-gray-700 px-4 py-2 text-sm font-semibold text-white transition hover:border-gray-500 hover:bg-gray-900"
+            className="inline-flex min-h-11 items-center rounded-full bg-[var(--signal)] px-5 text-sm font-semibold text-[#08111D] transition hover:brightness-110"
           >
-            YouTubeで全部見る ↗
+            YouTubeでこの配信を開く ↗
           </a>
         </div>
       </div>

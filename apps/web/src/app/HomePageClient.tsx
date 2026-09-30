@@ -63,6 +63,7 @@ export default function HomePageClient({
   const [latestUpdatedAt] = useState(initialLatestUpdatedAt)
   const [loading, setLoading] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedQuery(query), 400)
@@ -245,23 +246,57 @@ export default function HomePageClient({
   }, [])
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      <div className="border-b border-gray-800">
-        <div className="mx-auto max-w-5xl px-4 py-8">
-          <div className="max-w-3xl space-y-3">
-            <p className="max-w-2xl text-sm leading-7 text-gray-300 sm:text-base">
-              山口一郎のYouTubeライブ配信を、人物名・日付・話題からあとで探せるアーカイブ。
-            </p>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-              <span>{isSearching ? '検索結果' : '配信'} {resultCount.toLocaleString()}件</span>
-              {latestUpdatedAt && <span>最終更新 {formatUpdatedAt(latestUpdatedAt)}</span>}
+    <main className="min-h-screen bg-[var(--canvas)] text-[var(--ink)]">
+      <div className="hero-aurora">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:py-24">
+          <div className="max-w-[760px] space-y-4 lg:mx-auto lg:text-center">
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-[var(--aqua)] lg:text-xs">LIVE ARCHIVE</p>
+            <h1 className="hero-title">
+              <span className="block">FIND TONIGHT&apos;S</span>
+              <span className="hero-title-accent block">ICHIRO.</span>
+            </h1>
+            <p className="text-[15px] font-medium leading-7 tracking-[.01em] text-[var(--ink)] sm:text-base lg:text-lg lg:leading-[1.7]">山口一郎の配信から、今夜観たい一回を探す。</p>
+          </div>
+          <div className="mt-8 max-w-[760px] space-y-4 sm:mt-10 lg:mx-auto">
+            <div className="hero-search-frame">
+              <div className="hero-search-frame-inner">
+                <SearchBar value={query} onChange={setQuery} fuzzy={fuzzy} onFuzzyChange={setFuzzy} />
+              </div>
+            </div>
+            <div>
+              <button type="button" onClick={() => setShowHelp((value) => !value)} className="min-h-11 text-xs text-[var(--muted)] transition hover:text-[var(--ink)]">
+                {showHelp ? '▾' : '▸'} 検索の使い方
+              </button>
+              {showHelp && (
+                <div className="mt-2 space-y-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 text-xs leading-6 text-[var(--muted)]">
+                  <div className="space-y-1.5"><p className="font-semibold text-[var(--ink)]">キーワード検索</p><p>入力したキーワードをタイトル・要約から検索します。スペース区切りは OR 検索です。</p></div>
+                  <div className="space-y-1.5"><p className="font-semibold text-[var(--ink)]">除外検索</p><p><span className="font-mono text-[var(--ink)]">-</span> を先頭につけたキーワードを含む配信を除外します。</p></div>
+                  <div className="space-y-1.5"><p className="font-semibold text-[var(--ink)]">あいまい検索</p><p>表記ゆれや関連語もまとめてヒットします。</p></div>
+                  <div className="space-y-1.5"><p className="font-semibold text-[var(--ink)]">日付・期間検索</p><p>「2026年2月」「2026-02-14」のように入力すると、その月・日の配信に絞り込まれます。</p></div>
+                  <Link href="/entity" className="text-[var(--aqua)] underline">人物索引を見る →</Link>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-8 grid grid-cols-3 sm:mt-10">
+            <div className="hero-stat has-tip flex min-w-0 flex-col px-2 outline-none first:pl-0 sm:px-4 sm:first:pl-0 lg:items-center" tabIndex={0} data-tip="配信アーカイブ総数">
+              <span className="hero-stat-value">321</span>
+              <span className="hero-stat-label">ARCHIVES</span>
+            </div>
+            <div className="hero-stat has-tip flex min-w-0 flex-col px-2 outline-none sm:px-4 lg:items-center" tabIndex={0} data-tip="総再生回数">
+              <span className="hero-stat-value">58,044,318</span>
+              <span className="hero-stat-label">VIEWS</span>
+            </div>
+            <div className="hero-stat has-tip flex min-w-0 flex-col px-2 pr-0 outline-none sm:px-4 sm:pr-0 lg:items-center" tabIndex={0} data-tip="総配信時間">
+              <span className="hero-stat-value">671</span>
+              <span className="hero-stat-label">HOURS</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <nav className="flex gap-2">
+      <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+        <nav className="grid grid-cols-4 border-b border-[var(--line)]" aria-label="配信カテゴリ">
           {HOME_CATEGORIES.map((category) => (
             <button
               key={category.key}
@@ -270,31 +305,26 @@ export default function HomePageClient({
                 setView(category.key)
                 setQuery('')
               }}
-              className={`flex-1 rounded-full py-2 text-sm font-medium transition-colors ${
+              className={`min-h-11 border-b-2 px-1 text-xs font-medium transition-colors sm:text-sm ${
                 view === category.key && !isSearching
-                  ? 'border border-blue-500 bg-blue-950 text-blue-300 shadow-[0_0_8px_rgba(59,130,246,0.3)]'
-                  : 'border border-gray-700 bg-transparent text-gray-400 hover:border-blue-500 hover:text-blue-300'
+                  ? 'border-[var(--aqua)] text-[var(--ink)]'
+                  : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
             >
               {category.label}
             </button>
           ))}
         </nav>
-      </div>
-
-      <div className="mx-auto max-w-3xl space-y-4 px-4 pb-6">
-        <SearchBar value={query} onChange={setQuery} fuzzy={fuzzy} onFuzzyChange={setFuzzy} />
-
         {availableYears.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-xs text-gray-500">期間：</span>
+            <span className="shrink-0 text-xs text-[var(--muted)]">期間</span>
             <button
               type="button"
               onClick={() => setYear(null)}
-              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+              className={`min-h-11 rounded-full border px-3 text-xs transition-colors ${
                 year === null
-                  ? 'bg-indigo-600 font-semibold text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  ? 'border-[var(--aqua)] text-[var(--ink)]'
+                  : 'border-[var(--line)] text-[var(--muted)] hover:border-[var(--aqua)]'
               }`}
             >
               全期間
@@ -304,10 +334,10 @@ export default function HomePageClient({
                 key={availableYear}
                 type="button"
                 onClick={() => setYear(year === availableYear ? null : availableYear)}
-                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                className={`min-h-11 rounded-full border px-3 text-xs transition-colors ${
                   year === availableYear
-                    ? 'bg-indigo-600 font-semibold text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    ? 'border-[var(--aqua)] text-[var(--ink)]'
+                    : 'border-[var(--line)] text-[var(--muted)] hover:border-[var(--aqua)]'
                 }`}
               >
                 {availableYear}年
@@ -316,9 +346,13 @@ export default function HomePageClient({
           </div>
         )}
 
-        {tagOptions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-xs text-gray-500">タグ：</span>
+        {(tagOptions.length > 0 || cornerOptions.length > 0) && (
+          <div className="space-y-4">
+            <button type="button" onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="min-h-11 rounded-full border border-[var(--line)] px-4 text-sm text-[var(--ink)] transition hover:border-[var(--aqua)]">絞り込む（タグ・コーナー） {showFilters ? '▴' : '▾'}</button>
+            {showFilters && (
+              <div className="space-y-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4">
+            {tagOptions.length > 0 && <div className="flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-xs text-[var(--muted)]">タグ</span>
             {tagOptions.map((tag) => {
               const selected = activeFilter?.kind === 'tag' && activeFilter.value === tag.slug
               return (
@@ -327,22 +361,21 @@ export default function HomePageClient({
                   type="button"
                   onClick={() => handleFilterSelect('tag', tag.slug)}
                   aria-pressed={selected}
-                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                  className={`min-h-11 rounded-full border px-3 text-xs transition-colors ${
                     selected
-                      ? 'bg-indigo-600 font-semibold text-white'
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      ? 'border-[var(--aqua)] text-[var(--ink)]'
+                      : 'border-[var(--line)] text-[var(--muted)] hover:border-[var(--aqua)]'
                   }`}
                 >
                   {tag.label}
                 </button>
               )
             })}
-          </div>
-        )}
+              </div>
+            }
 
-        {cornerOptions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-xs text-gray-500">コーナー：</span>
+            {cornerOptions.length > 0 && <div className="flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-xs text-[var(--muted)]">コーナー</span>
             {cornerOptions.map((corner) => {
               const selected = activeFilter?.kind === 'corner' && activeFilter.value === corner
               return (
@@ -351,112 +384,67 @@ export default function HomePageClient({
                   type="button"
                   onClick={() => handleFilterSelect('corner', corner)}
                   aria-pressed={selected}
-                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                  className={`min-h-11 rounded-full border px-3 text-xs transition-colors ${
                     selected
-                      ? 'bg-indigo-600 font-semibold text-white'
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      ? 'border-[var(--aqua)] text-[var(--ink)]'
+                      : 'border-[var(--line)] text-[var(--muted)] hover:border-[var(--aqua)]'
                   }`}
                 >
                   {corner}
                 </button>
               )
             })}
+          </div>}
+          </div>)}
           </div>
         )}
 
-        {activeFilterLabel && (
+        {(activeFilterLabel || query || year) && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-500">絞り込み：</span>
+            <span className="text-xs text-[var(--muted)]">選択中</span>
+            {query && <button type="button" onClick={() => setQuery('')} className="min-h-9 rounded-full border border-[var(--line)] px-3 text-xs text-[var(--ink)]">「{query}」×</button>}
+            {year && <button type="button" onClick={() => setYear(null)} className="min-h-9 rounded-full border border-[var(--line)] px-3 text-xs text-[var(--ink)]">{year}年 ×</button>}
+            {activeFilterLabel && (
             <button
               type="button"
               onClick={() => setActiveFilter(null)}
-              className="rounded-full border border-indigo-800 bg-indigo-950 px-2.5 py-1 text-xs text-indigo-200 transition hover:border-indigo-700 hover:bg-indigo-900"
+              className="min-h-9 rounded-full border border-[var(--line)] px-3 text-xs text-[var(--ink)] transition hover:border-[var(--aqua)]"
             >
               {activeFilterLabel} ×
             </button>
+            )}
+            <button type="button" onClick={() => { setQuery(''); setYear(null); setActiveFilter(null) }} className="min-h-9 text-xs text-[var(--aqua)]">全解除</button>
           </div>
         )}
-
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowHelp((value) => !value)}
-            className="flex items-center gap-1 text-xs text-gray-500 transition-colors hover:text-gray-300"
-          >
-            <span>{showHelp ? '▾' : '▸'}</span>
-            <span>検索の使い方</span>
-          </button>
-          {showHelp && (
-            <div className="mt-2 space-y-3 rounded-lg border border-gray-800 bg-gray-900 p-4 text-xs text-gray-400">
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-300">キーワード検索</p>
-                <p>入力したキーワードをタイトル・要約から検索します。</p>
-                <p>スペース区切りで複数入力すると <span className="font-mono text-white">OR</span> 検索になります。</p>
-                <div className="space-y-0.5 font-mono text-gray-500">
-                  <p><span className="text-gray-300">浜田 ハマダ</span> → どちらかにヒットするものを表示</p>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-300">除外検索</p>
-                <p><span className="font-mono text-white">-</span> を先頭につけたキーワードを含む配信を除外します。</p>
-                <div className="space-y-0.5 font-mono text-gray-500">
-                  <p><span className="text-gray-300">浜田 -ゲーム</span> → 浜田を含み、ゲームを含まない</p>
-                  <p><span className="text-gray-300">-深夜 -歌</span> → 深夜と歌を両方除外</p>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-300">あいまい検索</p>
-                <p>検索欄右のトグルをオンにすると、表記ゆれや関連語もまとめてヒットします。</p>
-                <p className="text-gray-500">例：「さかな」で「サカナクション」もヒット</p>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-300">日付・期間検索</p>
-                <p>「2026年2月」「2026-02-14」のように入力すると、その月・日の配信に絞り込まれます。キーワードと組み合わせも可能です。</p>
-                <div className="space-y-0.5 font-mono text-gray-500">
-                  <p><span className="text-gray-300">2026年2月</span> → 2月の配信一覧</p>
-                  <p><span className="text-gray-300">2026-02-14</span> → 2月14日の配信</p>
-                  <p><span className="text-gray-300">2026年2月 浜田</span> → 2月 × 浜田</p>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-semibold text-gray-300">人物・エンティティ検索</p>
-                <p>登録済みの人物名や別名でも検索できます。テキストに名前が出ていない配信でも、エンティティとして紐付けられていれば表示されます。</p>
-                <p className="mt-1">
-                  <Link href="/entity" className="text-indigo-400 underline hover:text-indigo-300">
-                    人物索引を見る →
-                  </Link>
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
 
         <div className="flex items-start gap-3">
           {view !== 'top' && !isSearching && (
             <button
               type="button"
               onClick={() => setView('top')}
-              className="mt-0.5 shrink-0 text-xs text-gray-400 hover:text-white"
+              className="mt-0.5 shrink-0 text-xs text-[var(--muted)] hover:text-[var(--ink)]"
             >
               ← TOP
             </button>
           )}
           <div>
-            <h2 className="text-sm font-semibold text-gray-300">{sectionTitle}</h2>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <h2 className="text-base font-semibold text-[var(--ink)]">{sectionTitle}</h2>
+            <p className="mt-0.5 font-mono text-xs tabular-nums text-[var(--muted)]">
               表示中 {streams.length.toLocaleString()}件 / 全{resultCount.toLocaleString()}件
+              {latestUpdatedAt && ` / 最終更新 ${formatUpdatedAt(latestUpdatedAt)}`}
             </p>
           </div>
         </div>
 
         {loading ? (
-          <p className="py-12 text-center text-gray-500">読み込み中...</p>
+          <p className="rounded-2xl bg-[var(--surface)] py-12 text-center text-sm text-[var(--muted)]">読み込み中...</p>
         ) : streams.length === 0 ? (
-          <p className="py-4 text-sm text-gray-500">
-            {isSearching ? '該当する配信が見つかりません' : '該当する配信がまだありません'}
-          </p>
+          <div className="rounded-2xl bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--muted)]">
+            <p>{isSearching ? '該当する配信が見つかりません' : '該当する配信がまだありません'}</p>
+            <button type="button" onClick={() => { setQuery(''); setYear(null); setActiveFilter(null) }} className="mt-3 text-xs text-[var(--aqua)]">検索条件を解除する</button>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {streams.map((stream, index) => (
               <StreamCard
                 key={`${stream.id}:${bookmarkedStreamIdSet.has(stream.id) ? '1' : '0'}`}
@@ -471,12 +459,12 @@ export default function HomePageClient({
         )}
       </div>
 
-      <footer className="mt-12 border-t border-gray-800 px-4 py-6 text-center text-xs text-gray-500">
-        <p>管理者: <a href="https://x.com/ikki_i" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-300">ikki</a></p>
+      <footer className="footer-glow mt-12 px-4 py-6 text-center text-xs text-[var(--muted)]">
+        <p>管理者: <a href="https://x.com/ikki_i" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--ink)]">ikki</a></p>
         <p className="mt-1">非公式ファンサイト。サカナクション・山口一郎とは無関係です。</p>
         <p className="mt-2 flex justify-center gap-4">
-          <Link href="/about" className="underline hover:text-gray-300">このサービスについて</Link>
-          <Link href="/privacy" className="underline hover:text-gray-300">プライバシーポリシー</Link>
+          <Link href="/about" className="underline hover:text-[var(--ink)]">このサービスについて</Link>
+          <Link href="/privacy" className="underline hover:text-[var(--ink)]">プライバシーポリシー</Link>
         </p>
       </footer>
     </main>

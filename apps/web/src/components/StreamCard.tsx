@@ -32,6 +32,8 @@ type Props = {
   isBookmarked?: boolean
 }
 
+const SUMMARY_PREVIEW_LENGTH = 110
+
 function ActionButton({
   href,
   label,
@@ -46,7 +48,7 @@ function ActionButton({
       href={href}
       aria-label={label}
       title={label}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-black/70 text-lg text-white shadow-lg shadow-black/30 backdrop-blur transition hover:border-cyan-400/60 hover:text-cyan-200"
+      className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-raised)] text-lg text-[var(--ink)] transition hover:border-[var(--aqua)]"
     >
       {children}
     </Link>
@@ -71,6 +73,14 @@ export default function StreamCard({
   const cornerSet = new Set(stream.corner_names ?? [])
   const tagsOnly = (stream.tags ?? []).filter((tag) => !cornerSet.has(tag))
   const showMemberActions = Boolean(currentUserId)
+  const youtubeUrl = `https://www.youtube.com/watch?v=${stream.video_id}`
+  const filterItems = [
+    ...(stream.corner_names ?? []).map((value) => ({ kind: 'corner' as const, value, label: value })),
+    ...tagsOnly.map((value) => ({ kind: 'tag' as const, value, label: getTagLabel(value) })),
+  ]
+  const summaryPreview = stream.summary
+    ? stream.summary.slice(0, SUMMARY_PREVIEW_LENGTH) + (stream.summary.length > SUMMARY_PREVIEW_LENGTH ? '…' : '')
+    : null
 
   function handleBookmarkClick() {
     const nextBookmarked = !bookmarked
@@ -87,100 +97,68 @@ export default function StreamCard({
   }
 
   return (
-    <div className="group overflow-hidden rounded-lg border border-gray-800 bg-gray-900 transition-colors hover:border-gray-600">
+    <article className="stream-card group overflow-hidden rounded-2xl border">
       <div className="relative">
-        <Link href={`/stream/${stream.video_id}`} className="block">
-          {stream.thumbnail_url && (
-            <div className="relative">
+        <div className="relative aspect-video overflow-hidden bg-[var(--surface-raised)]">
+          {stream.thumbnail_url ? (
+            <>
               <Image
                 src={stream.thumbnail_url}
                 alt={stream.title}
                 fill
-                sizes="(min-width: 640px) 50vw, 100vw"
-                className="object-cover transition duration-300 group-hover:scale-[1.02]"
+                sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                className="object-cover transition duration-200 group-hover:scale-[1.015]"
               />
-              <div className="aspect-video w-full" />
-              {rank !== undefined && (
-                <div className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70">
-                  <span className={`text-sm font-bold ${rank <= 3 ? 'text-yellow-400' : 'text-gray-300'}`}>
-                    {rank}
-                  </span>
-                </div>
-              )}
-              {stream.duration_min != null && (
-                <div className="absolute right-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[11px] font-medium text-white">
-                  {stream.duration_min}分
-                </div>
-              )}
+            </>
+          ) : (
+            <div className="flex h-full flex-col justify-between p-4 text-[var(--muted)]">
+              <span className="text-[10px] font-medium tracking-[0.14em]">NO THUMBNAIL</span>
+              <span className="line-clamp-2 text-sm">{stream.title}</span>
             </div>
           )}
-          <div className="space-y-1.5 p-3">
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-400">{date}</p>
-            </div>
-            <h2 className="pr-14 font-medium leading-snug line-clamp-2">{stream.title}</h2>
-            {stream.summary && (
-              <p className="text-sm text-gray-400 line-clamp-2">{stream.summary}</p>
-            )}
-            <div className="flex items-center gap-3 pt-0.5">
-              {stream.view_count != null && (
-                <span className="text-xs text-gray-500">再生 {stream.view_count.toLocaleString()}</span>
-              )}
-              {stream.comment_count != null && (
-                <span className="text-xs text-gray-500">コメント {stream.comment_count.toLocaleString()}</span>
-              )}
-            </div>
-          </div>
-        </Link>
+          {rank !== undefined && rank <= 3 && (
+            <span className="absolute left-3 top-3 font-mono text-2xl font-semibold tabular-nums text-[var(--ink)]">{String(rank).padStart(2, '0')}</span>
+          )}
+          <div className="absolute left-3 top-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white">{date}</div>
+          {stream.duration_min != null && <div className="absolute right-3 top-3 rounded-full bg-black/65 px-2 py-1 text-[11px] text-white">{stream.duration_min}分</div>}
+          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" aria-label={`${stream.title}をYouTubeで開く`} className="stream-thumbnail-cta absolute bottom-3 right-3 inline-flex h-11 items-center rounded-full px-3 text-xs font-medium text-white transition hover:bg-[var(--signal)]">YouTube ↗</a>
+        </div>
+      </div>
 
+      <div className="space-y-3 p-4">
+        {filterItems.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {filterItems.slice(0, 2).map((item) => (
+              <button key={`${item.kind}:${item.value}`} type="button" onClick={() => onFilterSelect?.(item.kind, item.value)} className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)] hover:text-[var(--ink)]">{item.label}</button>
+            ))}
+            {filterItems.length > 2 && <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)]">+{filterItems.length - 2}</span>}
+          </div>
+        )}
+        <h2 className="line-clamp-2 text-base font-semibold leading-snug text-[var(--ink)]">{stream.title}</h2>
+        <p className="font-mono text-xs tabular-nums text-[var(--muted)]">
+          {date}{stream.view_count != null && ` ・ 再生 ${stream.view_count.toLocaleString()}`}{stream.chapters?.length ? ` ・ チャプター ${stream.chapters.length}` : ''}
+        </p>
+        {summaryPreview && <p className="text-sm leading-7 text-[var(--muted)]">{summaryPreview}</p>}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--signal)] px-4 text-sm font-semibold text-[#08111D] transition hover:brightness-110">YouTubeで開く ↗</a>
+          <Link href={`/stream/${stream.video_id}`} className="inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--line)] px-4 text-sm font-medium text-[var(--ink)] transition hover:border-[var(--aqua)]">要点・チャプターを見る →</Link>
+        </div>
         {showMemberActions && (
-          <div className="absolute bottom-3 right-3 z-10 flex items-center gap-2">
+          <div className="flex items-center gap-2 border-t border-[var(--line)] pt-3">
             <button
               type="button"
               aria-label={bookmarked ? 'ブックマーク解除' : 'ブックマーク'}
               title={bookmarked ? 'ブックマーク解除' : 'ブックマーク'}
               disabled={bookmarkPending}
               onClick={handleBookmarkClick}
-              className={`flex h-9 w-9 items-center justify-center rounded-full border bg-black/70 text-lg shadow-lg shadow-black/30 backdrop-blur transition ${
-                bookmarked
-                  ? 'border-rose-400/60 text-rose-300 hover:border-rose-300 hover:text-rose-200'
-                  : 'border-white/12 text-white hover:border-rose-400/60 hover:text-rose-200'
-              } disabled:cursor-not-allowed disabled:opacity-70`}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] text-lg text-[var(--muted)] transition hover:border-[var(--aqua)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {bookmarked ? '♥' : '♡'}
             </button>
-            <ActionButton href={`/member?addStream=${stream.id}`} label="プレイリストに追加">
-              ＋
-            </ActionButton>
+            <ActionButton href={`/member?addStream=${stream.id}`} label="プレイリストに追加">＋</ActionButton>
           </div>
         )}
       </div>
-
-      {(stream.corner_names?.length || tagsOnly.length) ? (
-        <div className="flex flex-wrap gap-1 border-t border-gray-800 px-3 pb-3 pt-1.5">
-          {stream.corner_names?.slice(0, 3).map((cornerName) => (
-            <button
-              key={cornerName}
-              type="button"
-              onClick={() => onFilterSelect?.('corner', cornerName)}
-              className="rounded-full bg-indigo-950 px-2 py-0.5 text-xs text-indigo-300 transition hover:bg-indigo-900 hover:text-indigo-200"
-            >
-              {cornerName}
-            </button>
-          ))}
-          {tagsOnly.slice(0, 4).map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              // Phase 2でタグ絞り込みを実装する際は、生のtag値ではなくslug正規化したキーで統一すること（レガシー日本語タグとの分裂を防ぐ）
-              onClick={() => onFilterSelect?.('tag', tag)}
-              className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-300 transition hover:bg-gray-700 hover:text-white"
-            >
-              {getTagLabel(tag)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    </article>
   )
 }

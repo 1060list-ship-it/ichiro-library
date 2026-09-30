@@ -79,32 +79,31 @@ export default function MagazinePage() {
     return () => { cancelled = true }
   }, [])
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">読み込み中...</div>
-  )
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">読み込み中...</div>
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      <header className="border-b border-gray-800 px-4 py-4 flex items-center justify-between">
-        <Link href="/" className="text-gray-400 hover:text-white text-sm">← 配信一覧</Link>
-        <h1 className="text-sm font-bold text-white">いっくん追いかけマガジン</h1>
-        <div className="w-16" />
-      </header>
-
-      <div className="max-w-2xl mx-auto px-4 py-4">
+    <main className="min-h-screen bg-[var(--canvas)] text-[var(--ink)]">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <Link href="/" className="inline-flex min-h-11 items-center text-sm text-[var(--muted)] hover:text-[var(--ink)]">← 配信一覧</Link>
+        <div className="mt-6 space-y-3">
+          <p className="text-xs font-medium tracking-[0.14em] text-[var(--aqua)]">WEEKLY MAGAZINE</p>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] sm:text-4xl">いっくん追いかけマガジン</h1>
+          <p className="text-sm leading-7 text-[var(--muted)]">配信とその週の出来事を、あとからたどる。</p>
+        </div>
+        <div className="mt-10">
         {magazines.length === 0 ? (
-          <div className="text-center py-12 space-y-2">
+          <div className="space-y-2 rounded-2xl bg-[var(--surface)] py-12 text-center">
             {error ? (
               <>
-                <p className="text-red-300 text-sm">マガジンを読み込めませんでした</p>
-                <p className="text-gray-600 text-xs">{error}</p>
+                <p className="text-sm text-[var(--signal)]">マガジンを読み込めませんでした</p>
+                <p className="text-xs text-[var(--muted)]">{error}</p>
               </>
             ) : (
-              <p className="text-gray-500 text-sm">まだマガジンがありません</p>
+              <p className="text-sm text-[var(--muted)]">まだマガジンがありません</p>
             )}
           </div>
         ) : (
-          <div className="divide-y divide-gray-800">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {magazines.map(mag => {
               const start = new Date(mag.week_start).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
               const end = new Date(mag.week_end).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
@@ -112,35 +111,38 @@ export default function MagazinePage() {
               const coverImageUrl = getMagazineCoverUrl(mag.week_label, mag.cover_image_url)
               return (
                 <Link key={mag.id} href={`/magazine/${mag.week_label}`}
-                  className="group flex gap-4 py-4 hover:bg-gray-900 transition-colors -mx-2 px-2 rounded-lg">
-                  <div className="flex-shrink-0 w-20 aspect-[210/297] rounded-sm overflow-hidden bg-neutral-100 shadow-lg shadow-black/30 ring-1 ring-white/10">
+                  className="group grid grid-cols-[88px_1fr] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block">
+                  <div className="h-full min-h-[132px] overflow-hidden bg-[var(--surface-raised)] sm:aspect-[210/297] sm:min-h-0">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
-                        className="w-full h-full object-contain" />
+                        className="h-full w-full object-contain" />
                     ) : (
-                      <div className="w-full h-full bg-neutral-100 text-gray-950 px-2 py-2 flex flex-col justify-between">
-                        <span className="text-[10px] font-black tracking-[0.2em] leading-tight">ICHIRO<br />LIBRARY</span>
-                        <span className="text-[10px] font-mono font-bold">{magazineNumber}</span>
+                      <div className="flex h-full w-full flex-col justify-between px-3 py-3 text-[var(--muted)]">
+                        <span className="text-[10px] font-semibold tracking-[0.14em] leading-tight">ICHIRO<br />LIBRARY</span>
+                        <span className="font-mono text-[10px] font-bold">{magazineNumber}</span>
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 py-1">
-                    <p className="text-base font-bold text-white leading-snug line-clamp-2 mb-2 group-hover:text-indigo-100 transition-colors">
+                  <div className="min-w-0 space-y-3 p-4">
+                    <p className="font-mono text-xs tabular-nums text-[var(--muted)]">{start} — {end}</p>
+                    <p className="line-clamp-2 text-base font-semibold leading-snug text-[var(--ink)]">
                       {mag.content.headline}
                     </p>
-                    <div className="flex flex-wrap gap-1">
-                      {mag.content.topics.slice(0, 3).map((t, i) => (
-                        <span key={i} className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                    <div className="flex flex-wrap gap-1.5">
+                      {mag.content.topics.slice(0, 2).map((t, i) => (
+                        <span key={i} className="rounded-full border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">
                           {t.title}
                         </span>
                       ))}
                     </div>
+                    <span className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--aqua)]">読む →</span>
                   </div>
                 </Link>
               )
             })}
           </div>
         )}
+      </div>
       </div>
     </main>
   )

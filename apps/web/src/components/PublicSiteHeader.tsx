@@ -7,8 +7,8 @@ import { supabase } from '@/lib/supabase'
 
 const NAV_ITEMS = [
   { href: '/', label: '配信一覧' },
-  { href: '/playlists', label: 'プレイリスト' },
   { href: '/magazine', label: 'マガジン' },
+  { href: '/playlists', label: 'プレイリスト' },
 ]
 
 const HIDDEN_PREFIXES = ['/admin', '/login']
@@ -94,13 +94,14 @@ export default function PublicSiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-800/80 bg-gray-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/" className="text-sm font-semibold tracking-[0.18em] text-white transition hover:text-gray-300">
-          ichiro library
+    <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--canvas)_90%,transparent)] backdrop-blur">
+      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:px-6">
+        <Link href="/" className="leading-none transition hover:opacity-80">
+          <span className="block text-sm font-semibold tracking-[-0.02em]"><span className="text-[var(--ink)]">ichiro</span> <span className="text-[var(--aqua)]">library</span></span>
+          <span className="mt-1 block text-[9px] font-medium tracking-[0.14em] text-[var(--muted)]">LIVE ARCHIVE</span>
         </Link>
 
-        <nav className="flex items-center gap-2">
+        <nav className="order-3 col-span-2 -mx-4 grid grid-cols-3 sm:order-none sm:col-span-1 sm:mx-0 sm:flex sm:justify-center sm:gap-5" aria-label="主要ナビゲーション">
           {NAV_ITEMS.map(item => {
             const active = isActivePath(pathname, item.href)
 
@@ -108,10 +109,10 @@ export default function PublicSiteHeader() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`flex h-11 items-center justify-center border-b-2 px-2 text-xs font-medium transition-colors sm:h-9 sm:px-0 ${
                   active
-                    ? 'bg-white text-gray-950'
-                    : 'bg-gray-900 text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ? 'border-[var(--aqua)] text-[var(--ink)]'
+                    : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
                 {item.label}
@@ -120,11 +121,11 @@ export default function PublicSiteHeader() {
           })}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-end gap-3">
           {isAuthenticated === false && (
             <Link
               href="/login"
-              className="text-xs text-gray-500 transition-colors hover:text-gray-300"
+              className="text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
             >
               ログイン
             </Link>
@@ -135,7 +136,7 @@ export default function PublicSiteHeader() {
               {isAdmin && (
                 <Link
                   href="/admin"
-                  className="rounded border border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
+                  className="border-b border-[var(--line)] px-1 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--aqua)] hover:text-[var(--ink)]"
                 >
                   管理
                 </Link>
@@ -144,7 +145,7 @@ export default function PublicSiteHeader() {
                 type="button"
                 onClick={() => { void handleLogout() }}
                 disabled={isSigningOut}
-                className="text-xs text-gray-600 transition-colors hover:text-gray-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ログアウト
               </button>

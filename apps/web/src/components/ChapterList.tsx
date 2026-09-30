@@ -17,29 +17,28 @@ function formatTime(sec: number) {
 
 export default function ChapterList({ chapters, videoId }: Props) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-baseline gap-2">
-        <p className="text-xs text-gray-500 font-medium">チャプター</p>
-      </div>
-      <div className="divide-y divide-gray-800 rounded-lg bg-gray-900 overflow-hidden">
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-[var(--ink)]">チャプター</h2>
+      <div className="divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
         {chapters.map(ch => (
           <a
             key={ch.id}
             href={`https://www.youtube.com/watch?v=${videoId}&t=${ch.start_sec}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex gap-3 px-4 py-3 hover:bg-gray-800 transition-colors"
+            aria-label={`${formatTime(ch.start_sec)}から「${ch.title}」をYouTubeで開く`}
+            className="flex min-h-14 gap-3 px-4 py-3 transition hover:bg-[var(--surface-raised)]"
           >
-            <span className="text-xs text-indigo-400 font-mono w-12 flex-shrink-0 pt-0.5">
+            <span className="w-14 shrink-0 pt-0.5 font-mono text-xs tabular-nums text-[var(--aqua)]">
               {formatTime(ch.start_sec)}
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-medium">{ch.title}</p>
-              {ch.summary && <p className="text-xs text-gray-400 mt-0.5">{ch.summary}</p>}
+              <p className="text-sm font-medium text-[var(--ink)]">{ch.title}</p>
+              {ch.summary && <p className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{ch.summary}</p>}
             </div>
           </a>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
