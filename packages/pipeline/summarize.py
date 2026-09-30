@@ -22,6 +22,7 @@ TARGET_PROMPT_VER = "v4"
 PROMPT_VERSION = TARGET_PROMPT_VER
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{TARGET_PROMPT_VER}.txt"
 SONG_CATALOG_PATH = Path(__file__).parent / "prompts" / "song_catalog.txt"
+ENTITY_CATALOG_PATH = Path(__file__).parent / "prompts" / "entity_catalog.txt"
 SONGS_SQL_PATH = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "013_songs.sql"
 MODEL_NAME = "gemini-2.5-flash"
 
@@ -91,7 +92,17 @@ def get_gemini_client():
 
 
 @lru_cache(maxsize=1)
+def _load_entity_catalog_text() -> str:
+    if ENTITY_CATALOG_PATH.exists():
+        return ENTITY_CATALOG_PATH.read_text(encoding="utf-8").strip()
+    return ""
+
+
+@lru_cache(maxsize=1)
 def _load_song_catalog_text() -> str:
+    if ENTITY_CATALOG_PATH.exists():
+        return ENTITY_CATALOG_PATH.read_text(encoding="utf-8").strip()
+    return ""
     if SONG_CATALOG_PATH.exists():
         return SONG_CATALOG_PATH.read_text(encoding="utf-8").strip()
 
@@ -216,6 +227,7 @@ def summarize(
     prompt = (
         prompt_template
         .replace("{song_catalog}", _load_song_catalog_text())
+        .replace("{entity_catalog}", _load_entity_catalog_text())
         .replace("{transcript}", transcript_text)
     )
     if day is not None:
