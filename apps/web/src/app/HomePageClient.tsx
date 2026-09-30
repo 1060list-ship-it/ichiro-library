@@ -55,6 +55,8 @@ export default function HomePageClient({
   const [fuzzy, setFuzzy] = useState(initialState.fuzzy)
   const [year, setYear] = useState(initialState.year)
   const [activeFilter, setActiveFilter] = useState<ActiveCardFilter | null>(initialState.activeFilter)
+  const [tagOptions, setTagOptions] = useState<{ slug: string; label: string }[]>([])
+  const [cornerOptions, setCornerOptions] = useState<string[]>([])
   const [availableYears] = useState(initialAvailableYears)
   const [streams, setStreams] = useState(initialStreams)
   const [resultCount, setResultCount] = useState(initialResultCount)
@@ -145,6 +147,38 @@ export default function HomePageClient({
       logSearch(trimmedQuery, result.resultCount)
     }
   }, [activeFilter, debouncedQuery, fuzzy, logSearch, view, year])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadFilterOptions() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client: any = supabase
+      const [tagRes, cornerRes] = await Promise.all([
+        client.from('tag_vocabulary').select('slug,label').eq('is_active', true).order('sort_order'),
+        client.from('streams').select('corner_names').not('corner_names', 'is', null).limit(2000),
+      ])
+
+      if (cancelled) {
+        return
+      }
+
+      setTagOptions((tagRes.data ?? []) as { slug: string; label: string }[])
+      const corners = new Set<string>()
+      for (const row of (cornerRes.data ?? []) as { corner_names: string[] | null }[]) {
+        for (const corner of row.corner_names ?? []) {
+          corners.add(corner)
+        }
+      }
+      setCornerOptions([...corners].sort((a, b) => a.localeCompare(b, 'ja')))
+    }
+
+    void loadFilterOptions()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (isFirstFetch.current) {
@@ -279,6 +313,54 @@ export default function HomePageClient({
                 {availableYear}年
               </button>
             ))}
+          </div>
+        )}
+
+        {tagOptions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-xs text-gray-500">タグ：</span>
+            {tagOptions.map((tag) => {
+              const selected = activeFilter?.kind === 'tag' && activeFilter.value === tag.slug
+              return (
+                <button
+                  key={tag.slug}
+                  type="button"
+                  onClick={() => handleFilterSelect('tag', tag.slug)}
+                  aria-pressed={selected}
+                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                    selected
+                      ? 'bg-indigo-600 font-semibold text-white'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {tag.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {cornerOptions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-xs text-gray-500">コーナー：</span>
+            {cornerOptions.map((corner) => {
+              const selected = activeFilter?.kind === 'corner' && activeFilter.value === corner
+              return (
+                <button
+                  key={corner}
+                  type="button"
+                  onClick={() => handleFilterSelect('corner', corner)}
+                  aria-pressed={selected}
+                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                    selected
+                      ? 'bg-indigo-600 font-semibold text-white'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {corner}
+                </button>
+              )
+            })}
           </div>
         )}
 

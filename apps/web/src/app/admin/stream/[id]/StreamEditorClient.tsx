@@ -585,21 +585,6 @@ export default function StreamEditorClient({ videoId }: Props) {
                     )
                   })}
                 </div>
-
-                {form.selectedTags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {form.selectedTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => toggleTag(tag)}
-                        className="rounded-full border border-indigo-700 bg-indigo-900/40 px-3 py-1 text-xs text-indigo-300 transition hover:border-indigo-500"
-                      >
-                        {tagVocabulary.find((entry) => entry.slug === tag)?.label ?? tag} ×
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-3">
