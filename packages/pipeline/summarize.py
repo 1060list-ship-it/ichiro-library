@@ -100,9 +100,6 @@ def _load_entity_catalog_text() -> str:
 
 @lru_cache(maxsize=1)
 def _load_song_catalog_text() -> str:
-    if ENTITY_CATALOG_PATH.exists():
-        return ENTITY_CATALOG_PATH.read_text(encoding="utf-8").strip()
-    return ""
     if SONG_CATALOG_PATH.exists():
         return SONG_CATALOG_PATH.read_text(encoding="utf-8").strip()
 
