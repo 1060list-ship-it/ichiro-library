@@ -22,6 +22,7 @@ type Magazine = {
 }
 
 const LOAD_TIMEOUT_MS = 10000
+const PAGE_SIZE = 20
 
 function withTimeout<T>(promise: PromiseLike<T>, message: string): Promise<T> {
   return Promise.race([
@@ -39,6 +40,8 @@ function formatMagazineNumber(weekLabel: string) {
 export default function MagazinePage() {
   const [magazines, setMagazines] = useState<Magazine[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function MagazinePage() {
             .from('magazines')
             .select('id, week_label, week_start, week_end, content, cover_image_url, generated_at')
             .order('week_label', { ascending: false })
-            .limit(20),
+            .range(0, PAGE_SIZE - 1),
           'マガジン一覧の取得がタイムアウトしました'
         )
 
@@ -66,6 +69,7 @@ export default function MagazinePage() {
         }
 
         setMagazines((data ?? []) as Magazine[])
+        setHasMore((data ?? []).length === PAGE_SIZE)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'マガジン一覧の取得に失敗しました')
@@ -78,6 +82,35 @@ export default function MagazinePage() {
     load()
     return () => { cancelled = true }
   }, [])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    setError(null)
+
+    try {
+      const from = magazines.length
+      const { data, error: queryError } = await withTimeout(
+        supabase
+          .from('magazines')
+          .select('id, week_label, week_start, week_end, content, cover_image_url, generated_at')
+          .order('week_label', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1),
+        'マガジン一覧の取得がタイムアウトしました'
+      )
+
+      if (queryError) {
+        setError(queryError.message)
+        return
+      }
+
+      setMagazines((prev) => [...prev, ...((data ?? []) as Magazine[])])
+      setHasMore((data ?? []).length === PAGE_SIZE)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'マガジン一覧の取得に失敗しました')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">読み込み中...</div>
 
@@ -140,6 +173,18 @@ export default function MagazinePage() {
                 </Link>
               )
             })}
+          </div>
+        )}
+        {hasMore && magazines.length > 0 && (
+          <div className="mt-8 text-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="inline-flex min-h-11 items-center rounded-full border border-[var(--line)] px-6 text-sm font-medium text-[var(--ink)] transition hover:border-[var(--aqua)] disabled:opacity-50"
+            >
+              {loadingMore ? '読み込み中...' : 'もっと見る'}
+            </button>
           </div>
         )}
       </div>
