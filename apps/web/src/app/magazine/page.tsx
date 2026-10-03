@@ -112,10 +112,10 @@ export default function MagazinePage() {
               return (
                 <Link key={mag.id} href={`/magazine/${mag.week_label}`}
                   className="group grid grid-cols-[88px_1fr] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block">
-                  <div className="h-full min-h-[132px] overflow-hidden bg-[var(--surface-raised)] sm:aspect-[210/297] sm:max-h-[380px] sm:min-h-0">
+                  <div className="relative h-[132px] w-[88px] shrink-0 overflow-hidden bg-[var(--surface-raised)] sm:h-auto sm:w-full sm:aspect-[210/297] sm:max-h-[380px]">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
-                        className="h-full w-full object-cover object-top" />
+                        className="absolute inset-0 h-full w-full object-cover object-top" />
                     ) : (
                       <div className="flex h-full w-full flex-col justify-between px-3 py-3 text-[var(--muted)]">
                         <span className="text-[10px] font-semibold tracking-[0.14em] leading-tight">ICHIRO<br />LIBRARY</span>
