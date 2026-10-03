@@ -111,8 +111,8 @@ export default function MagazinePage() {
               const coverImageUrl = getMagazineCoverUrl(mag.week_label, mag.cover_image_url)
               return (
                 <Link key={mag.id} href={`/magazine/${mag.week_label}`}
-                  className="group grid grid-cols-[88px_1fr] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block">
-                  <div className="relative h-[124px] w-[88px] shrink-0 self-center overflow-hidden bg-[var(--surface-raised)] sm:h-auto sm:w-full sm:self-auto sm:aspect-[210/297]">
+                  className="group grid grid-cols-[88px_1fr] gap-3 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block sm:gap-0">
+                  <div className="relative ml-3 h-[124px] w-[88px] shrink-0 self-center overflow-hidden bg-[var(--surface-raised)] sm:ml-0 sm:h-auto sm:w-full sm:self-auto sm:aspect-[210/297]">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
                         className="absolute inset-0 h-full w-full object-cover object-top" />
