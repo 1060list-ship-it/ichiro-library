@@ -219,17 +219,6 @@ ENTITIES: list[dict] = [
     # カテゴリ: remixer（DJ・リミキサー陣）
     # ─────────────────────────────────────────
     {
-        "slug": "agraph",
-        "name": "agraph（牛尾 憲輔）",
-        "match_names": ["agraph", "牛尾憲輔", "牛尾 憲輔"],
-        "category": "remixer",
-        "role": "サウンドアーティスト・映画音楽家",
-        "description": "「NF」初期メンバーであり山口と強い信頼で結ばれている。映画『聲の形』やアニメ『チェンソーマン』の劇伴でも知られる。オリジナルの美しさを最大化するアンビエント調リミックスを提供。",
-        "related_work": "「夜の踊り子 (agraph Remix)」「目が明く藍色 (agraph remix)」",
-        "external_url": None,
-        "sort_order": 40,
-    },
-    {
         "slug": "aoki-takamasa",
         "name": "AOKI takamasa（青木 孝允）",
         "match_names": ["AOKI takamasa", "青木孝允", "青木 孝允"],
@@ -300,15 +289,15 @@ ENTITIES: list[dict] = [
     # カテゴリ: team（チームサカナクション・前身バンド）
     # ─────────────────────────────────────────
     {
-        "slug": "sasaki-yukio",
-        "name": "佐々木 幸生（サニーさん）",
-        "match_names": ["佐々木幸生", "佐々木 幸生", "サニーさん", "サニー"],
+        "slug": "agraph",
+        "name": "agraph（牛尾 憲輔）",
+        "match_names": ["agraph", "牛尾憲輔", "牛尾 憲輔"],
         "category": "team",
-        "role": "PA・ライブサウンドエンジニア（アコースティック社）",
-        "description": "サカナクションのライブサウンドに絶対的な魔法をかける音響エンジニア。採算度外視でスピーカーを大量配置する「音響の怪物」。6.1chサラウンドやd&b Soundscapeなどの最先端音響空間をオペレート。2026年3月に『サウンド＆レコーディング・マガジン』の表紙を山口と共に飾った。",
-        "related_work": "SAKANAQUARIUM ライブ音響",
+        "role": "サウンドアーティスト・映画音楽家",
+        "description": "「NF」初期メンバーであり山口と強い信頼で結ばれている。映画『聲の形』やアニメ『チェンソーマン』の劇伴でも知られる。オリジナルの美しさを最大化するアンビエント調リミックスを提供。",
+        "related_work": "「夜の踊り子 (agraph Remix)」「目が明く藍色 (agraph remix)」",
         "external_url": None,
-        "sort_order": 50,
+        "sort_order": 40,
     },
     {
         "slug": "uramoto-masafumi",
@@ -370,7 +359,7 @@ ENTITIES: list[dict] = [
         "name": "サバちゃん（関口さん）",
         "match_names": ["サバちゃん", "関口さん"],
         "category": "team",
-        "role": "チーフマネージャー",
+        "role": "マネージャー",
         "description": "本名は関口。山口が「関口＝関サバ＝サバちゃん」と命名。山口と他のメンバー、ビジネスのバランスを繋ぐ現場の立役者。",
         "related_work": None,
         "external_url": None,
@@ -387,10 +376,32 @@ ENTITIES: list[dict] = [
         "external_url": None,
         "sort_order": 57,
     },
+    {
+        "slug": "higuma-kun",
+        "name": "ひぐま君（熊木）",
+        "match_names": ["ひぐま君"],
+        "category": "team",
+        "role": "チーフマネージャー",
+        "description": "サカナクションのチーフマネージャー。",
+        "related_work": None,
+        "external_url": None,
+        "sort_order": 58,
+    },
 
     # ─────────────────────────────────────────
     # カテゴリ: craftsman（工芸・アートディレクター・デザイナー）
     # ─────────────────────────────────────────
+    {
+        "slug": "sasaki-yukio",
+        "name": "佐々木 幸生（サニーさん）",
+        "match_names": ["佐々木幸生", "佐々木 幸生", "サニーさん", "サニー"],
+        "category": "craftsman",
+        "role": "PA・ライブサウンドエンジニア（アコースティック社）",
+        "description": "サカナクションのライブサウンドに絶対的な魔法をかける音響エンジニア。採算度外視でスピーカーを大量配置する「音響の怪物」。6.1chサラウンドやd&b Soundscapeなどの最先端音響空間をオペレート。2026年3月に『サウンド＆レコーディング・マガジン』の表紙を山口と共に飾った。",
+        "related_work": "SAKANAQUARIUM ライブ音響",
+        "external_url": None,
+        "sort_order": 50,
+    },
     {
         "slug": "yagi-takahiro",
         "name": "八木 隆裕（開化堂六代目）",
