@@ -112,7 +112,7 @@ export default function MagazinePage() {
               return (
                 <Link key={mag.id} href={`/magazine/${mag.week_label}`}
                   className="group grid grid-cols-[88px_1fr] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block">
-                  <div className="h-full min-h-[132px] overflow-hidden bg-[var(--surface-raised)] sm:aspect-[210/297] sm:min-h-0">
+                  <div className="h-full min-h-[132px] overflow-hidden bg-[var(--surface-raised)] sm:aspect-[210/297] sm:max-h-[380px] sm:min-h-0">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
                         className="h-full w-full object-cover object-top" />
