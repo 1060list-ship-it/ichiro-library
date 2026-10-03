@@ -116,7 +116,6 @@ export default function StreamPage() {
         <div className="space-y-4">
           <p className="font-mono text-xs tabular-nums text-[var(--muted)]">{date}{stream.duration_min != null && ` / ${stream.duration_min}分`}{stream.view_count != null && ` / 再生 ${stream.view_count.toLocaleString()}`}</p>
           <h1 className="text-2xl font-semibold leading-snug tracking-[-0.02em] sm:text-4xl">{stream.title}</h1>
-          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--signal)] px-5 text-sm font-semibold text-[#08111D] transition hover:brightness-110">YouTubeでこの配信を開く ↗</a>
         </div>
         <div className="aspect-video w-full overflow-hidden rounded-2xl border border-[var(--line)]">
           <iframe
@@ -193,17 +192,6 @@ export default function StreamPage() {
 
         {/* チャプター */}
         {chapters.length > 0 && <ChapterList chapters={chapters} videoId={stream.video_id} />}
-
-        <div className="border-t border-[var(--line)] pt-8">
-          <a
-            href={youtubeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center rounded-full bg-[var(--signal)] px-5 text-sm font-semibold text-[#08111D] transition hover:brightness-110"
-          >
-            YouTubeでこの配信を開く ↗
-          </a>
-        </div>
       </div>
     </main>
   )
