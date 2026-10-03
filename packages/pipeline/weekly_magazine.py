@@ -35,6 +35,8 @@ logger = logging.getLogger("weekly_magazine")
 
 MODEL_NAME = "gemini-2.5-flash"
 IMAGE_MODEL = "gpt-image-2"
+# gpt-image-2 は任意比率を出せないため 1024x1536 固定で生成し、
+# _make_cover で中央クロップして CSS の aspect-[210/297] に揃える（タスク②）。
 IMAGE_SIZE  = "1024x1536"
 STORAGE_BUCKET = "magazine-covers"
 
@@ -44,7 +46,7 @@ Generate a weekly vertical editorial image for a UI hero slot; all typography wi
 Output ONLY the English image prompt text (max 100 words). No explanations, no labels, no code blocks, no Japanese.
 
 FIXED STYLE (always include ALL of these in your output prompt):
-- vertical Japanese editorial artwork, 2:3 portrait format, pure visual illustration — no text zones
+- vertical Japanese editorial artwork, 210:297 portrait format (same ratio as an A4 magazine), pure visual illustration — no text zones
 - upper 35% of the composition must be a minimal, nearly-empty tonal field (dark sky, fog, blank paper, or flat wash only) — no detailed elements, figures, or patterns in that zone; this area will be covered by title text
 - two-tone or near-monochrome graphic style: black ink, charcoal, warm white paper, one muted cool gray/blue accent only
 - quiet, intellectual, urban, art-book quality — not a flyer, not a YouTube thumbnail, not a product photo
@@ -222,6 +224,16 @@ def _check_image_for_text(image_bytes: bytes, gemini_client) -> bool:
     return answer.startswith('YES')
 
 
+def _crop_center_to_size(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """アスペクトを保ったまま中央クロップで目標サイズに揃える（引き伸ばし防止）。"""
+    w, h = img.size
+    scale = max(target_w / w, target_h / h)
+    resized = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
+    left = (resized.width - target_w) // 2
+    top = (resized.height - target_h) // 2
+    return resized.crop((left, top, left + target_w, top + target_h))
+
+
 def _make_cover(
     image_bytes: bytes,
     issue_number: str,
@@ -230,17 +242,13 @@ def _make_cover(
     """
     静的 PNG オーバーレイ（ICHIRO LIBRARY ロゴ）＋ Pillow 可変テキスト合成。
     AI 画像の輝度を判定し、黒または白テキストを自動選択する。
+    出力は CSS の aspect-[210/297] に一致させる（タスク②）。
     """
-    TEMPLATE_W, TEMPLATE_H = 1086, 1448
-    OUT_W, OUT_H = 1024, 1536
+    OUT_W, OUT_H = 1024, 1448  # 1024/1448 ≒ 210/297（CSS に一致）
 
-    # スケール係数（テンプレート座標 → 出力画像座標）
-    sx = OUT_W / TEMPLATE_W  # ≈ 0.943
-    sy = OUT_H / TEMPLATE_H  # ≈ 1.061
-
-    # ── 1. AI 生成画像を読み込み、出力サイズにリサイズ ─────────────────────
+    # ── 1. AI 生成画像を読み込み、210:297 に中央クロップ ────────────────────
     base = Image.open(BytesIO(image_bytes)).convert("RGBA")
-    base = base.resize((OUT_W, OUT_H), Image.LANCZOS)
+    base = _crop_center_to_size(base, OUT_W, OUT_H)
 
     # ── 2. 輝度判定（上部 40% の平均輝度） ─────────────────────────────────
     top_region = base.crop((0, 0, OUT_W, int(OUT_H * 0.4)))
@@ -253,7 +261,9 @@ def _make_cover(
     ref_dir = Path(__file__).parent.parent.parent / "reference"
     overlay_name = "magazine_TEX_tmpW.png" if use_white else "ichiro-library-text.png"
     overlay = Image.open(ref_dir / overlay_name).convert("RGBA")
-    overlay = overlay.resize((OUT_W, OUT_H), Image.LANCZOS)
+    # オーバーレイ (1086x1448) も比率を保って中央クロップする。
+    # ロゴ実体は x66〜836 のため左右 31px ずつのカットに掛からない（実測済み）。
+    overlay = _crop_center_to_size(overlay, OUT_W, OUT_H)
     base = Image.alpha_composite(base, overlay)
 
     # ── 3.5. 上部グラデーション（タイトルエリアを確保） ─────────────────────────
@@ -290,12 +300,13 @@ def _make_cover(
     zen_kaku_path = str(get_zen_kaku_bold_path())
     zen_antique_path = str(get_zen_antique_path())
 
-    f_issue = ImageFont.truetype(zen_kaku_path, int(52 * sy))
-    f_date  = ImageFont.truetype(zen_kaku_path, int(28 * sy))
+    f_issue = ImageFont.truetype(zen_kaku_path, 52)
+    f_year  = ImageFont.truetype(zen_kaku_path, 36)
+    f_date  = ImageFont.truetype(zen_kaku_path, 36)  # 2段化で拡大（各行のロゴ干渉なしを実測済み）
 
-    # ── 5. w番号（右寄せ、右端 x≈977） ─────────────────────────────────────
-    right_x = int(1036 * sx)  # テンプレート右端 x=1036 をスケール
-    top_y_issue = int(72 * sy)  # テンプレート y=72 をスケール
+    # ── 5. w番号（右寄せ、右マージン 50px＝旧テンプレート 1086-1036 を踏襲） ─
+    right_x = OUT_W - 50
+    top_y_issue = 72
 
     issue_bbox = draw.textbbox((0, 0), issue_number, font=f_issue)
     issue_w = issue_bbox[2] - issue_bbox[0]
@@ -306,14 +317,26 @@ def _make_cover(
         fill=text_color,
     )
 
-    # ── 6. 日付（右寄せ、w番号の下） ────────────────────────────────────────
-    top_y_date = int(140 * sy)  # テンプレート y=140 をスケール
+    # ── 6. 日付（右寄せ、w番号の下・年と月日で2段化） ───────────────────────
+    top_y_year = 140
+    date_year, date_md = date_range.split("/", 1)  # "2026" / "01/01 – 01/07"
 
-    date_bbox = draw.textbbox((0, 0), date_range, font=f_date)
+    year_bbox = draw.textbbox((0, 0), date_year, font=f_year)
+    year_w = year_bbox[2] - year_bbox[0]
+    draw.text(
+        (right_x - year_w, top_y_year - year_bbox[1]),
+        date_year,
+        font=f_year,
+        fill=text_color,
+    )
+
+    top_y_date = top_y_year + (year_bbox[3] - year_bbox[1]) + 12
+
+    date_bbox = draw.textbbox((0, 0), date_md, font=f_date)
     date_w = date_bbox[2] - date_bbox[0]
     draw.text(
         (right_x - date_w, top_y_date - date_bbox[1]),
-        date_range,
+        date_md,
         font=f_date,
         fill=text_color,
     )
