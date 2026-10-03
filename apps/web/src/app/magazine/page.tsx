@@ -115,7 +115,7 @@ export default function MagazinePage() {
                   <div className="h-full min-h-[132px] overflow-hidden bg-[var(--surface-raised)] sm:aspect-[210/297] sm:min-h-0">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
-                        className="h-full w-full object-contain" />
+                        className="h-full w-full object-cover object-top" />
                     ) : (
                       <div className="flex h-full w-full flex-col justify-between px-3 py-3 text-[var(--muted)]">
                         <span className="text-[10px] font-semibold tracking-[0.14em] leading-tight">ICHIRO<br />LIBRARY</span>
