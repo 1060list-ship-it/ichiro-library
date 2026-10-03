@@ -103,7 +103,7 @@ export default function MagazinePage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {magazines.map(mag => {
               const start = new Date(mag.week_start).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
               const end = new Date(mag.week_end).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
@@ -112,7 +112,7 @@ export default function MagazinePage() {
               return (
                 <Link key={mag.id} href={`/magazine/${mag.week_label}`}
                   className="group grid grid-cols-[88px_1fr] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--aqua)] sm:block">
-                  <div className="relative h-[124px] w-[88px] shrink-0 overflow-hidden bg-[var(--surface-raised)] sm:h-auto sm:w-full sm:aspect-[210/297] sm:max-h-[380px]">
+                  <div className="relative h-[124px] w-[88px] shrink-0 overflow-hidden bg-[var(--surface-raised)] sm:h-auto sm:w-full sm:aspect-[210/297]">
                     {coverImageUrl ? (
                       <img src={coverImageUrl} alt={mag.content.headline}
                         className="absolute inset-0 h-full w-full object-cover object-top" />
