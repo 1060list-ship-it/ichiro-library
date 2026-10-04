@@ -143,7 +143,7 @@ export default function StreamCard({
         </p>
         {summaryPreview && <p className="text-sm leading-7 text-[var(--muted)]">{summaryPreview}</p>}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--signal)] px-4 text-sm font-semibold text-[#08111D] transition hover:brightness-110">YouTubeで開く ↗</a>
+          <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--signal)] px-4 text-sm font-semibold text-[var(--signal)] transition hover:bg-[var(--signal)]/10">YouTubeで開く ↗</a>
           <Link href={`/stream/${stream.video_id}`} className="inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--line)] px-4 text-sm font-medium text-[var(--ink)] transition hover:border-[var(--aqua)]">要点・チャプターを見る →</Link>
         </div>
         {showMemberActions && (
