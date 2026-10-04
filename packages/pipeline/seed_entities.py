@@ -151,7 +151,7 @@ ENTITIES: list[dict] = [
     {
         "slug": "kato-konatsu",
         "name": "加藤 小夏",
-        "match_names": ["加藤小夏", "加藤 小夏"],
+        "match_names": ["加藤小夏", "加藤 小夏", "小夏ちゃん"],
         "category": "celebrity",
         "role": "女優・タレント",
         "description": "山口の熱烈な「推し」。ゲーム実況配信でのスーパーチャットから親交が開始。2026年ロッテ『THE DAY』ビデオポッドキャスト番組で共演。「夜の踊り子」ミームのダンボール船動画を共同再現。",
@@ -213,6 +213,17 @@ ENTITIES: list[dict] = [
         "related_work": "SMAP「Magic Time」「Moment」楽曲提供",
         "external_url": None,
         "sort_order": 31,
+    },
+    {
+        "slug": "emon-kurumi",
+        "name": "エモン久瑠美",
+        "match_names": ["エモン久瑠美", "エモン 久瑠美", "久瑠美", "くるみ"],
+        "category": "celebrity",
+        "role": "モデル",
+        "description": "サカナクションのMusic Video（MV）などに出演するモデル。「忘れられないの」のMusic Video出演。ツアーのオープニング映像にも登場。",
+        "related_work": "「忘れられないの」Music Video出演",
+        "external_url": None,
+        "sort_order": 82,
     },
 
     # ─────────────────────────────────────────

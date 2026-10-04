@@ -190,6 +190,27 @@ export function parseJapaneseDateFromQuery(q: string): {
   return { year: null, month: null, day: null, remaining: q, label: null }
 }
 
+function toKatakana(value: string): string {
+  return value.replace(/[\u3041-\u3096]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+}
+
+function toHiragana(value: string): string {
+  return value.replace(/[\u30A1-\u30F6]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+}
+
+export function expandKanaVariants(keyword: string): string[] {
+  const variants = [keyword]
+  const kata = toKatakana(keyword)
+  const hira = toHiragana(keyword)
+  if (kata !== keyword) {
+    variants.push(kata)
+  }
+  if (hira !== keyword && hira !== kata) {
+    variants.push(hira)
+  }
+  return variants
+}
+
 export async function fetchHomePageMeta(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client: any,
@@ -250,16 +271,32 @@ export async function fetchHomePageStreams(
     const parts = textQuery.trim().split(/\s+/).filter(Boolean)
     const includes = parts.filter((keyword) => !keyword.startsWith('-'))
     const excludes = parts.filter((keyword) => keyword.startsWith('-')).map((keyword) => keyword.slice(1)).filter(Boolean)
+    const expandedIncludes = [...new Set(includes.flatMap((keyword) => expandKanaVariants(keyword)))]
+    const expandedExcludes = [...new Set(excludes.flatMap((excluded) => expandKanaVariants(excluded)))]
 
     if (fuzzy) {
-      const res = await client.rpc('search_streams', {
-        query: includes.join(' ') || textQuery,
-        sort_by: 'date_desc',
-        page_num: 1,
-        page_size: 500,
-      })
+      const baseQuery = includes.join(' ') || textQuery
+      const queryTexts = [...new Set(expandKanaVariants(baseQuery))]
 
-      let results = (res.data ?? []) as HomeStreamBase[]
+      const seenRpcIds = new Set<string>()
+      const rpcResults: HomeStreamBase[] = []
+      for (const queryText of queryTexts) {
+        const res = await client.rpc('search_streams', {
+          query: queryText,
+          sort_by: 'date_desc',
+          page_num: 1,
+          page_size: 500,
+        })
+
+        for (const row of ((res.data ?? []) as HomeStreamBase[])) {
+          if (!seenRpcIds.has(row.id)) {
+            seenRpcIds.add(row.id)
+            rpcResults.push(row)
+          }
+        }
+      }
+
+      let results = rpcResults
 
       if (dateFrom) {
         results = results.filter((stream) => stream.stream_date >= dateFrom! && stream.stream_date < dateTo!)
@@ -267,8 +304,8 @@ export async function fetchHomePageStreams(
 
       results = results.filter((stream) => matchesCardFilter(stream, activeFilter))
 
-      const filtered = excludes.length > 0
-        ? results.filter((stream) => excludes.every((excluded) => (
+      const filtered = expandedExcludes.length > 0
+        ? results.filter((stream) => expandedExcludes.every((excluded) => (
           !stream.title?.toLowerCase().includes(excluded.toLowerCase())
           && !stream.summary?.toLowerCase().includes(excluded.toLowerCase())
         )))
@@ -280,7 +317,7 @@ export async function fetchHomePageStreams(
       let textStreams: HomeStreamBase[] = []
 
       if (includes.length > 0) {
-        const textConditions = includes.flatMap((keyword) => (
+        const textConditions = expandedIncludes.flatMap((keyword) => (
           [`title.ilike.%${keyword}%`, `summary.ilike.%${keyword}%`]
         )).join(',')
 
@@ -289,7 +326,7 @@ export async function fetchHomePageStreams(
           activeFilter,
         )
 
-        for (const excluded of excludes) {
+        for (const excluded of expandedExcludes) {
           textQueryBuilder = textQueryBuilder
             .not('title', 'ilike', `%${excluded}%`)
             .not('summary', 'ilike', `%${excluded}%`)
@@ -301,7 +338,7 @@ export async function fetchHomePageStreams(
 
       const entityIds = new Set<string>()
 
-      await Promise.all(includes.map(async (keyword) => {
+      await Promise.all(expandedIncludes.map(async (keyword) => {
         const [byName, byAlias] = await Promise.all([
           client.from('entities').select('id').ilike('name', `%${keyword}%`),
           client.from('entities').select('id').contains('match_names', [keyword]),
@@ -328,7 +365,7 @@ export async function fetchHomePageStreams(
             activeFilter,
           )
 
-          for (const excluded of excludes) {
+          for (const excluded of expandedExcludes) {
             entityQueryBuilder = entityQueryBuilder
               .not('title', 'ilike', `%${excluded}%`)
               .not('summary', 'ilike', `%${excluded}%`)
