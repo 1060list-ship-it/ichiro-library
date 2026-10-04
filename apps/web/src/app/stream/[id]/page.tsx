@@ -140,7 +140,7 @@ export default function StreamPage() {
                 <Link
                   key={cornerName}
                   href={`/?corner=${encodeURIComponent(cornerName)}`}
-                  className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
+                  className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
                 >
                   {cornerName}
                 </Link>
@@ -153,7 +153,7 @@ export default function StreamPage() {
                 <Link
                   key={tag}
                   href={`/?tag=${encodeURIComponent(tag)}`}
-                  className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
+                  className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)]"
                 >
                   {getTagLabel(tag)}
                 </Link>

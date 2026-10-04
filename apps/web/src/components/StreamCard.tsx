@@ -132,7 +132,7 @@ export default function StreamCard({
         {filterItems.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {filterItems.slice(0, 2).map((item) => (
-              <button key={`${item.kind}:${item.value}`} type="button" onClick={() => onFilterSelect?.(item.kind, item.value)} className="min-h-7 rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)] hover:text-[var(--ink)]">{item.label}</button>
+              <button key={`${item.kind}:${item.value}`} type="button" onClick={() => onFilterSelect?.(item.kind, item.value)} className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)] transition hover:border-[var(--aqua)] hover:text-[var(--ink)]">{item.label}</button>
             ))}
             {filterItems.length > 2 && <span className="inline-flex min-h-7 items-center rounded-full border border-[var(--line)] px-2 text-xs text-[var(--muted)]">+{filterItems.length - 2}</span>}
           </div>
