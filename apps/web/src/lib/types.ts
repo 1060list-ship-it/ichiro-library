@@ -47,6 +47,20 @@ export type Rating = {
   created_at: string
 }
 
+export type SuperchatRankingRow = {
+  author_channel_id: string
+  author_name: string
+  event_count: number
+  total_jpy: number
+}
+
+export type SuperchatVideoStat = {
+  video_id: string
+  event_count: number
+  author_count: number
+  total_jpy: number
+}
+
 export type Song = {
   id: string
   title: string
@@ -257,6 +271,18 @@ export type Database = {
       preview_song_matches: {
         Args: PreviewSongMatchesArgs
         Returns: SongMatchPreviewResult
+      }
+      superchat_ranking_all: {
+        Args: { sort_by?: string; limit_n?: number }
+        Returns: SuperchatRankingRow[]
+      }
+      superchat_ranking_by_video: {
+        Args: { target_video_id: string; sort_by?: string; limit_n?: number }
+        Returns: SuperchatRankingRow[]
+      }
+      superchat_video_stats: {
+        Args: Record<string, never>
+        Returns: SuperchatVideoStat[]
       }
     }
   }
