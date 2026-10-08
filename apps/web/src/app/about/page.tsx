@@ -52,7 +52,7 @@ export default function AboutPage() {
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <strong className="text-white">カテゴリから探す</strong> —
-                最新・再生数・ワイワイ・ライブビデオ解説などの切り口で配信を一覧できます
+                最新・再生数の切り口で配信を一覧できます
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <strong className="text-white">年別フィルター</strong> —
@@ -71,14 +71,6 @@ export default function AboutPage() {
                 バンドメンバー・ゲスト名から関連配信を一覧表示
               </li>
             </ul>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-xl font-semibold text-white">技術について</h2>
-            <p className="text-sm leading-7 text-gray-300 sm:text-base">
-              YouTube Data API v3 で動画の情報と字幕を取得し、Google Gemini
-              でAI要約・タグ付けを行っています。Next.js + Supabase で構築しています。
-            </p>
           </section>
 
           <section className="space-y-3">
