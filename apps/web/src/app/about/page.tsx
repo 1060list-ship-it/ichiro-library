@@ -63,8 +63,8 @@ export default function AboutPage() {
                 AI が生成したチャプター・ハイライト・要約・登場人物一覧
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <strong className="text-white">週刊マガジン</strong> —
-                週ごとの配信まとめを自動生成
+                <strong className="text-white">週刊マガジン（制作中）</strong> —
+                週ごとの配信まとめを準備しています
               </li>
               <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <strong className="text-white">エンティティ検索</strong> —
