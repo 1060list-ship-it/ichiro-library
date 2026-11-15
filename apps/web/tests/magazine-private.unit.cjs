@@ -105,19 +105,10 @@ async function main() {
   }
   console.log('PASS: old local and Storage fallback covers suppressed')
 
-  const originalTimer = global.setTimeout
-  const originalClear = global.clearTimeout
-  const originalWindow = global.window
-  let nextTimer = 0
-  const timers = new Map()
-  const navigations = []
-  global.setTimeout = fn => { const id = ++nextTimer; timers.set(id, fn); return id }
-  global.clearTimeout = id => timers.delete(id)
-  global.window = { location: { assign: url => navigations.push(url) } }
   const element = (type, props) => ({ type, props: props ?? {} })
   Module._load = function(request, parent, isMain) {
     if (request === 'react') return {
-      useState: value => [value, () => {}], useEffect: () => {}, useRef: value => ({ current: value }),
+      useState: value => [value, () => {}], useEffect: () => {},
     }
     if (request === 'react/jsx-runtime') return { jsx: element, jsxs: element, Fragment: 'fragment' }
     if (request === 'next/link') return { __esModule: true, default: 'link' }
@@ -135,36 +126,27 @@ async function main() {
     headerModule.paths = module.paths
     headerModule._compile(headerCode, headerFile)
     const tree = headerModule.exports.default()
-    function findLogo(node) {
-      if (!node || typeof node !== 'object') return null
-      if (node.type === 'link' && node.props.href === '/' && node.props.onClick) return node
-      for (const child of [node.props?.children].flat(Infinity)) {
-        const found = findLogo(child)
-        if (found) return found
+    function collect(node, links, texts) {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'link') {
+        links.push(node.props.href)
+        if (node.props.onClick) links.push('HAS_ON_CLICK:' + node.props.href)
       }
-      return null
+      for (const child of [node.props?.children].flat(Infinity)) {
+        if (typeof child === 'string') texts.push(child)
+        else collect(child, links, texts)
+      }
     }
-    const logo = findLogo(tree)
-    assert(logo, 'logo control exists')
-    const click = () => logo.props.onClick({ detail: 1, preventDefault() {} })
-    for (let n = 0; n < 4; n += 1) click()
-    assert.deepEqual(navigations, [])
-    click()
-    assert.deepEqual(navigations, ['/magazine'], 'five taps open the magazine')
-    assert.equal(timers.size, 0, 'five taps cancel the ordinary navigation')
-    click()
-    assert.equal(timers.size, 1)
-    for (const fn of timers.values()) fn()
-    assert.deepEqual(navigations, ['/magazine', '/'], 'one tap still opens home after timeout')
-    let prevented = false
-    logo.props.onClick({ detail: 0, preventDefault() { prevented = true } })
-    assert.equal(prevented, false, 'keyboard activation retains the normal link')
-    console.log('PASS: offline five-tap, single-tap and keyboard checks')
+    const links = []
+    const texts = []
+    collect(tree, links, texts)
+    assert(!links.includes('HAS_ON_CLICK:/'), 'logo must be a plain home link (no tap interception)')
+    assert(!texts.includes('マガジン'), 'public header must not show a magazine link')
+    assert(links.includes('/playlists'), 'ordinary navigation stays intact')
+    console.log('PASS: public header is plain (no tap handler, no magazine link); admin link is role-gated in source')
+    assert(fs.readFileSync(headerFile, 'utf8').includes("href=\"/magazine\""), 'admin-only magazine link exists in source')
   } finally {
     Module._load = originalLoad
-    global.setTimeout = originalTimer
-    global.clearTimeout = originalClear
-    global.window = originalWindow
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -23,28 +23,6 @@ export default function PublicSiteHeader() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
-  const logoTaps = useRef(0)
-  const logoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => () => {
-    if (logoTimer.current) clearTimeout(logoTimer.current)
-  }, [])
-
-  const handleLogoClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    if (event.detail === 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    if (logoTimer.current) clearTimeout(logoTimer.current)
-    logoTaps.current += 1
-    if (logoTaps.current >= 5) {
-      logoTaps.current = 0
-      window.location.assign('/magazine')
-      return
-    }
-    logoTimer.current = setTimeout(() => {
-      logoTaps.current = 0
-      window.location.assign('/')
-    }, 900)
-  }
 
   useEffect(() => {
     let active = true
@@ -117,7 +95,7 @@ export default function PublicSiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[color:color-mix(in_srgb,var(--canvas)_90%,transparent)] backdrop-blur">
       <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:px-6">
-        <Link href="/" onClick={handleLogoClick} className="leading-none transition hover:opacity-80">
+        <Link href="/" className="leading-none transition hover:opacity-80">
           <span className="block text-sm font-semibold tracking-[-0.02em]"><span className="text-[var(--ink)]">ichiro</span> <span className="text-[var(--aqua)]">library</span></span>
           <span className="mt-1 block text-[9px] font-medium tracking-[0.14em] text-[var(--muted)]">LIVE ARCHIVE</span>
         </Link>
@@ -155,12 +133,20 @@ export default function PublicSiteHeader() {
           {isAuthenticated === true && (
             <>
               {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="border-b border-[var(--line)] px-1 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--aqua)] hover:text-[var(--ink)]"
-                >
-                  管理
-                </Link>
+                <>
+                  <Link
+                    href="/magazine"
+                    className="border-b border-[var(--line)] px-1 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--aqua)] hover:text-[var(--ink)]"
+                  >
+                    マガジン
+                  </Link>
+                  <Link
+                    href="/admin"
+                    className="border-b border-[var(--line)] px-1 py-1 text-xs text-[var(--muted)] transition-colors hover:border-[var(--aqua)] hover:text-[var(--ink)]"
+                  >
+                    管理
+                  </Link>
+                </>
               )}
               <button
                 type="button"
