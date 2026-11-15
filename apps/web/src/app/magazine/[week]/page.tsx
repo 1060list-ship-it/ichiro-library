@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { getMagazineCoverUrl, hasLocalMagazineCover } from '@/lib/magazineCovers'
+import { getMagazineCoverUrl } from '@/lib/magazineCovers'
 import {
   PUBLIC_ENTITY_LINK_SELECT,
   PUBLIC_MAGAZINE_SELECT,
@@ -283,7 +283,7 @@ export default function MagazineWeekPage() {
 
   const { content } = magazine
   const coverImageUrl = getMagazineCoverUrl(magazine.week_label, magazine.cover_image_url)
-  const precomposedCover = hasLocalMagazineCover(magazine.week_label) || magazine.cover_image_url !== null
+  const precomposedCover = Boolean(coverImageUrl)
 
   return (
     <main className="min-h-screen bg-[var(--canvas)] text-[var(--ink)]">

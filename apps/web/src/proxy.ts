@@ -61,6 +61,39 @@ export default async function proxy(request: NextRequest) {
   const isAdminPath =
     request.nextUrl.pathname === '/admin' || request.nextUrl.pathname.startsWith('/admin/')
   const isLoginPath = request.nextUrl.pathname === '/login'
+  const isMagazinePath =
+    request.nextUrl.pathname === '/magazine' || request.nextUrl.pathname.startsWith('/magazine/')
+  const isMagazineCover = request.nextUrl.pathname.startsWith('/magazine-covers/')
+
+  if (isMagazinePath || isMagazineCover) {
+    // Unlike the existing optimistic cookie check, this boundary requires a
+    // verified user and an administrator role, including for static covers.
+    if (!data.user) {
+      if (isMagazineCover) {
+        const denied = new NextResponse(null, { status: 404 })
+        denied.headers.set('Cache-Control', 'private, no-store')
+        denied.headers.set('X-Robots-Tag', 'noindex, nofollow')
+        return applyResponseCookies(denied)
+      }
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('return', `${request.nextUrl.pathname}${request.nextUrl.search}`)
+      const redirect = applyResponseCookies(NextResponse.redirect(loginUrl))
+      redirect.headers.set('Cache-Control', 'private, no-store')
+      redirect.headers.set('X-Robots-Tag', 'noindex, nofollow')
+      return redirect
+    }
+    const { data: role, error } = await supabase.from('user_roles')
+      .select('role').eq('user_id', data.user.id).maybeSingle()
+    if (error || role?.role !== 'admin') {
+      const denied = new NextResponse(null, { status: 404 })
+      denied.headers.set('Cache-Control', 'private, no-store')
+      denied.headers.set('X-Robots-Tag', 'noindex, nofollow')
+      return applyResponseCookies(denied)
+    }
+    response.headers.set('Cache-Control', 'private, no-store')
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    return response
+  }
 
   if ((isMemberPath || isAdminPath) && !hasSessionCookie) {
     const loginUrl = new URL('/login', request.url)
@@ -70,6 +103,9 @@ export default async function proxy(request: NextRequest) {
 
   if (isLoginPath && hasSessionCookie) {
     const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('return'))
+    if ((returnTo === '/magazine' || returnTo.startsWith('/magazine/')) && !data.user) {
+      return response
+    }
     return applyResponseCookies(NextResponse.redirect(new URL(returnTo, request.url)))
   }
 
@@ -77,5 +113,5 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/member/:path*', '/admin/:path*', '/login'],
+  matcher: ['/member/:path*', '/admin/:path*', '/login', '/magazine/:path*', '/magazine-covers/:path*'],
 }

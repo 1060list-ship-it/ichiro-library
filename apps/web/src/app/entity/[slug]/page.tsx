@@ -73,9 +73,6 @@ export default async function EntityDetailPage({ params }: PageProps) {
           <Link href="/entity" className="text-sm text-gray-400 hover:text-white transition-colors">
             ← 索引へ
           </Link>
-          <Link href="/magazine" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-            マガジン
-          </Link>
         </div>
       </header>
 

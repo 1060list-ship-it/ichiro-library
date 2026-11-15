@@ -45,8 +45,8 @@ export default async function EntityHubPage() {
     <main className="min-h-screen bg-gray-950 text-white">
       <header className="border-b border-gray-800/80 px-4 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/magazine" className="text-sm text-gray-400 hover:text-white transition-colors">
-            ← マガジンへ
+          <Link href="/" className="text-sm text-gray-400 hover:text-white transition-colors">
+            ← 配信一覧へ
           </Link>
           <span className="text-xs text-gray-500">いちろう人物・関係性ノート</span>
         </div>

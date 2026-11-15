@@ -1,14 +1,12 @@
-const LOCAL_MAGAZINE_COVERS: Record<string, string> = {
-  '2026-W18': '/magazine-covers/2026-W18.png',
-  '2026-W19': '/magazine-covers/2026-W19.png',
-  '2026-W20': '/magazine-covers/2026-W20.png',
-  '2026-W21': '/magazine-covers/2026-W21.png',
-}
+// Existing artwork is withdrawn while replacements and their access controls
+// are prepared. Do not fall back to previously published Storage URLs.
+const SHOW_MAGAZINE_COVERS = false
+const LOCAL_MAGAZINE_COVERS: Record<string, string> = {}
 
 export function getMagazineCoverUrl(weekLabel: string, fallbackUrl: string | null) {
-  return LOCAL_MAGAZINE_COVERS[weekLabel] ?? fallbackUrl
+  return SHOW_MAGAZINE_COVERS ? (LOCAL_MAGAZINE_COVERS[weekLabel] ?? fallbackUrl) : null
 }
 
 export function hasLocalMagazineCover(weekLabel: string) {
-  return weekLabel in LOCAL_MAGAZINE_COVERS
+  return SHOW_MAGAZINE_COVERS && weekLabel in LOCAL_MAGAZINE_COVERS
 }

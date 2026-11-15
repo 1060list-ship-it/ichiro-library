@@ -52,6 +52,9 @@ jobs:
         run: python update_likes.py
 
       - name: Validate and run magazine generation
+        # 一時停止: マガジン全面リニューアル（一幾承認 2026-11-15）まで自動生成を止める。
+        # 再開時はこの if 行を削除。表紙は現行 concept の public URL 生成のため停止対象。
+        if: false
         env:
           INPUT_DATE: ${{ github.event.inputs.date || '' }}
           INPUT_WEEKS_AGO: ${{ github.event.inputs.weeks_ago || '0' }}
