@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { type ReactNode, useState, useTransition } from 'react'
 import { toggleBookmark } from '@/app/member/actions'
 import { getTagLabel } from '@/lib/tag-labels'
+import SummaryReviewBadge from './SummaryReviewBadge'
 import type { Stream } from '@/lib/types'
 
 type StreamCardStream = Pick<
@@ -16,6 +17,7 @@ type StreamCardStream = Pick<
   | 'duration_min'
   | 'thumbnail_url'
   | 'summary'
+  | 'summary_review_status'
   | 'view_count'
   | 'comment_count'
   | 'tags'
@@ -141,6 +143,7 @@ export default function StreamCard({
         <p className="font-mono text-xs tabular-nums text-[var(--muted)]">
           {date}{stream.view_count != null && ` ・ 再生 ${stream.view_count.toLocaleString()}`}{stream.chapters?.length ? ` ・ チャプター ${stream.chapters.length}` : ''}
         </p>
+        {stream.summary && <SummaryReviewBadge status={stream.summary_review_status} />}
         {summaryPreview && <p className="text-sm leading-7 text-[var(--muted)]">{summaryPreview}</p>}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--signal)] px-4 text-sm font-semibold text-[var(--signal)] transition hover:bg-[var(--signal)]/10">YouTubeで開く ↗</a>

@@ -206,18 +206,24 @@ def transcribe_and_store(
     # transcript 取得済みとして TranscriptResult を組み立てて再利用
     from get_transcript import build_timestamped_text
     from summarize import summarize
-    from store import upsert_stream, insert_chapters, save_transcript_snapshot
+    from store import upsert_stream, insert_chapters, save_transcript_snapshot, get_existing_stream, valid_generated_summary
+
+    before_generation = get_existing_stream(supabase_client, video_id)
 
     timestamped_text = build_timestamped_text(snippets)
     ai_result = summarize(timestamped_text, model=gemini, stream_date=video_meta.get("stream_date"))
 
-    stream_id, is_review_locked = upsert_stream(
+    saved = upsert_stream(
         client=supabase_client,
         video_meta=video_meta,
         transcript_text=full_text,
         transcript_source="whisper",
         ai_result=ai_result,
+        before_generation=before_generation,
     )
+    stream_id, is_review_locked = saved["stream_id"], saved["is_review_locked"]
+    if not valid_generated_summary(ai_result):
+        ai_result = None
 
     snapshot_id = None
     if snippets:
@@ -228,6 +234,9 @@ def transcribe_and_store(
 
     if not is_review_locked and ai_result and ai_result.get("chapters"):
         insert_chapters(supabase_client, stream_id, ai_result["chapters"], snapshot_id=snapshot_id)
+
+    from summary_review import consume_first_saved
+    consume_first_saved(supabase_client, saved, model=gemini, snapshot_id=snapshot_id)
 
     logger.info(f"[{video_id}] whisper_transcribe 完了: stream_id={stream_id}")
 

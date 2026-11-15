@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import SummaryReviewBadge, { SummaryReviewDetail } from '@/components/SummaryReviewBadge'
+import { fetchSummaryReview, type ReviewDetail } from '../../summary-review-actions'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   getSelectableAdminTags,
   type AdminTagVocabularyEntry,
@@ -154,6 +156,32 @@ function TextField({
 
 export default function StreamEditorClient({ videoId }: Props) {
   const router = useRouter()
+  const [review, setReview] = useState<ReviewDetail>(null)
+  const [reviewError, setReviewError] = useState('')
+  const [reviewLoading, setReviewLoading] = useState(true)
+  const reviewRequest = useRef(0)
+
+  function invalidateReview() {
+    reviewRequest.current += 1
+    setReview(null)
+    setReviewError('内容が変更されたため校閲詳細を表示できません。保存後に再取得します。')
+    setReviewLoading(false)
+  }
+
+  async function reloadReview(id: string) {
+    const request = ++reviewRequest.current
+    setReview(null)
+    setReviewError('')
+    setReviewLoading(true)
+    try {
+      const result = await fetchSummaryReview(id)
+      if (request === reviewRequest.current) setReview(result)
+    } catch {
+      if (request === reviewRequest.current) setReviewError('校閲情報を取得できませんでした。')
+    } finally {
+      if (request === reviewRequest.current) setReviewLoading(false)
+    }
+  }
   const [stream, setStream] = useState<AdminEditableStream | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [tagVocabulary, setTagVocabulary] = useState<AdminTagVocabularyEntry[]>([])
@@ -240,9 +268,11 @@ export default function StreamEditorClient({ videoId }: Props) {
     }
 
     load()
+    void reloadReview(videoId)
 
     return () => {
       active = false
+      reviewRequest.current += 1
     }
   }, [videoId])
 
@@ -287,6 +317,7 @@ export default function StreamEditorClient({ videoId }: Props) {
   async function handleSave(returnToList = false) {
     if (!form) return
 
+    invalidateReview()
     setSaving(true)
     setSaveMessage('')
     setPageError('')
@@ -307,6 +338,7 @@ export default function StreamEditorClient({ videoId }: Props) {
       const result = await updateAdminStream(payload)
       const updated = result.stream
       setStream(updated)
+      await reloadReview(videoId)
       setForm(toFormState(updated))
       if (returnToList) {
         router.push('/admin')
@@ -484,15 +516,17 @@ export default function StreamEditorClient({ videoId }: Props) {
             <section className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-5">
               <label className="block space-y-2">
                 <span className="text-sm text-gray-300">配信の要約</span>
+                <SummaryReviewBadge status={stream.summary_review_status} />
                 <p className="text-xs text-gray-500">配信内容を短く分かりやすくまとめます。</p>
                 <textarea
                   value={form.summary}
-                  onChange={(event) => setForm({ ...form, summary: event.target.value })}
+                  onChange={(event) => { invalidateReview(); setForm({ ...form, summary: event.target.value }) }}
                   rows={18}
                   className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-white outline-none transition focus:border-gray-600"
                 />
               </label>
 
+              <SummaryReviewDetail review={review} error={reviewError} loading={reviewLoading} />
               {stream && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -653,7 +687,7 @@ export default function StreamEditorClient({ videoId }: Props) {
                   type="button"
                   role="switch"
                   aria-checked={form.isReviewed}
-                  onClick={() => setForm({ ...form, isReviewed: !form.isReviewed })}
+                  onClick={() => { invalidateReview(); setForm({ ...form, isReviewed: !form.isReviewed }) }}
                   className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
                     form.isReviewed ? 'bg-white' : 'bg-gray-700'
                   }`}

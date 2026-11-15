@@ -14,8 +14,9 @@ import {
 } from '@/lib/selects'
 import type { Stream, Chapter, Entity } from '@/lib/types'
 import ChapterList from '@/components/ChapterList'
+import SummaryReviewBadge from '@/components/SummaryReviewBadge'
 
-type StreamDetail = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'summary' | 'tags' | 'corner_names' | 'guests'>
+type StreamDetail = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'duration_min' | 'view_count' | 'summary' | 'summary_review_status' | 'tags' | 'corner_names' | 'guests'>
 type ChapterListItem = Pick<Chapter, 'id' | 'start_sec' | 'title' | 'summary'>
 type LinkableEntity = Pick<Entity, 'slug' | 'name' | 'match_names'>
 
@@ -166,6 +167,7 @@ export default function StreamPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">見どころ</h2>
             <div className="space-y-1 rounded-2xl bg-[var(--surface)] p-4">
+            <SummaryReviewBadge status={stream.summary_review_status} />
             <p className="text-sm leading-7 text-[var(--ink)]">{linkifyBody(stream.summary, entities)}</p>
             <div className="pt-2 space-y-1">
               {!reported && !reporting && (

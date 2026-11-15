@@ -4,6 +4,7 @@ Supabase にデータを登録・更新するモジュール
 
 import os
 import logging
+from uuid import uuid4
 from typing import Optional
 from supabase import create_client, Client
 
@@ -37,11 +38,36 @@ def get_existing_video_ids(client: Client) -> set[str]:
 
 def get_existing_stream(client: Client, video_id: str) -> Optional[dict]:
     resp = client.table("streams").select(
-        "id,is_reviewed,summary,tags,corner_names,guests,songs,has_live_singing,talk_topics"
+        "id,is_reviewed,summary_review_version,transcript,summary,tags,corner_names,guests,songs,has_live_singing,talk_topics"
     ).eq("video_id", video_id).limit(1).execute()
     rows = resp.data or []
     return rows[0] if rows else None
 
+
+
+def valid_generated_summary(result: object) -> bool:
+    return isinstance(result, dict) and isinstance(result.get("summary"), str) and bool(result["summary"].strip())
+
+
+def generation_version(before: Optional[dict], current: dict) -> int:
+    if before is not None and any(before.get(k) != current.get(k) for k in ("id", "summary_review_version", "is_reviewed")):
+        raise ValueError("stream changed during generation")
+    version = current.get("summary_review_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+        raise ValueError("invalid summary review version")
+    return version
+
+
+def save_generated_summary(client: Client, stream_id: str, expected_version: int, result: dict) -> dict:
+    if not valid_generated_summary(result):
+        raise ValueError("generated summary is empty or invalid")
+    response = client.rpc("save_generated_summary", {
+        "p_stream_id": stream_id, "p_expected_version": expected_version,
+        "p_summary_text": result["summary"], "p_review_run_id": str(uuid4()),
+    }).execute()
+    if not isinstance(response.data, dict) or response.data.get("stream_id") != stream_id or not isinstance(response.data.get("is_review_locked"), bool):
+        raise ValueError("invalid RPC response; save outcome unknown")
+    return response.data
 
 def _load_tag_vocabulary(client: Client) -> tuple[set[str], dict[str, str]]:
     global _TAG_VOCAB_CACHE
@@ -140,10 +166,10 @@ def _ai_metadata(ai_result: Optional[dict]) -> tuple[Optional[str], Optional[str
     return MODEL_NAME, TARGET_PROMPT_VER
 
 
-def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict]) -> tuple[str, bool]:
+def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transcript_source: str, ai_result: Optional[dict], before_generation: Optional[dict] = None) -> dict:
     """
     streams テーブルに1件 upsert する。
-    戻り値: (登録された streams.id, レビュー済み動画か)
+    戻り値: stream_id と is_review_locked を含む辞書
     """
     existing = get_existing_stream(client, video_meta["video_id"])
     is_review_locked = bool(existing and existing.get("is_reviewed"))
@@ -151,8 +177,15 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
     status = "public"
     if not transcript_text:
         status = "transcript_failed"
-    elif ai_result is None:
+    elif not valid_generated_summary(ai_result):
         status = "summary_failed"
+    ai_result = ai_result if valid_generated_summary(ai_result) else None
+    if before_generation is not None:
+        if existing is None:
+            raise ValueError("stream disappeared during generation")
+        generation_version(before_generation, existing)
+    elif existing is not None and ai_result:
+        raise ValueError("stream appeared during generation")
     ai_model, ai_prompt_ver = _ai_metadata(ai_result)
 
     row = {
@@ -168,13 +201,11 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
         "thumbnail_url": video_meta.get("thumbnail_url"),
         "transcript":    transcript_text or None,
         "status":        status,
-        "is_reviewed":   is_review_locked,
         "ai_model":      ai_model,
         "ai_prompt_ver": ai_prompt_ver,
     }
 
     if ai_result:
-        row["summary"]      = ai_result.get("summary")
         row["tags"]         = normalize_tags(
             client,
             ai_result.get("tags", []),
@@ -188,12 +219,26 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
 
     if is_review_locked and existing:
         for field in _REVIEW_LOCKED_FIELDS:
-            row[field] = existing.get(field)
+            row.pop(field, None)
         logger.info(f"[{video_meta['video_id']}] レビュー済みのため手動編集フィールドを保持")
 
-    resp = client.table("streams").upsert(row, on_conflict="video_id").execute()
-    stream_id = resp.data[0]["id"]
-    logger.info(f"[{video_meta['video_id']}] streams upsert 完了: {stream_id}")
+    if before_generation is None:
+        resp = client.table("streams").insert(row).execute()
+    else:
+        version = generation_version(before_generation, before_generation)
+        resp = (client.table("streams").update(row)
+                .eq("id", before_generation["id"])
+                .eq("summary_review_version", version)
+                .eq("is_reviewed", before_generation["is_reviewed"])
+                .execute())
+    if not resp.data or len(resp.data) != 1:
+        raise ValueError("stream changed during metadata update")
+    written = resp.data[0]
+    stream_id = written["id"]
+    result = {"stream_id": stream_id, "is_review_locked": is_review_locked}
+    if ai_result:
+        version = generation_version(None, written)
+        result = save_generated_summary(client, stream_id, version, ai_result)
 
     try:
         from extract_entities import find_entity_ids, load_entities, save_stream_entities, stream_text
@@ -206,7 +251,7 @@ def upsert_stream(client: Client, video_meta: dict, transcript_text: str, transc
     except Exception as exc:
         logger.warning(f"[{video_meta['video_id']}] stream_entities 保存をスキップ: {exc}")
 
-    return stream_id, is_review_locked
+    return result
 
 
 def _chapter_base_row(stream_id: str, ch: dict, sort_order: int, start_sec: int) -> dict:

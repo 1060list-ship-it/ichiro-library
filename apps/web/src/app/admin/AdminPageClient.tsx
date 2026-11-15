@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import SummaryReviewBadge from '@/components/SummaryReviewBadge'
 import type { AdminDashboardData, AdminListStream, EnqueueJobInput, PipelineJob, SearchLogPeriod, SearchLogStats } from './actions'
 import {
   cancelPipelineJob,
@@ -136,6 +137,7 @@ function StreamRow({
           <span>{formatDate(stream.stream_date)}</span>
           <span>{formatStatus(stream.status)}</span>
           <span>{stream.is_reviewed ? '確認済み' : '未レビュー'}</span>
+          <SummaryReviewBadge status={stream.summary_review_status} />
         </div>
         <p className="mt-1 text-xs text-gray-500">{stream.video_id}</p>
       </div>

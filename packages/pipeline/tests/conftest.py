@@ -172,6 +172,8 @@ class FakeQuery:
 
         if self.mode == "update":
             for row in matched:
+                if self.table_name == "streams" and "transcript" in self._payload and row.get("transcript") != self._payload["transcript"]:
+                    row["summary_review_version"] += 1
                 row.update(self._payload)
             updated = [dict(r) for r in matched]
             self.client.update_calls.append(
@@ -192,10 +194,15 @@ class FakeQuery:
             inserted = []
             for row in rows_to_insert:
                 new_row = dict(row)
+                if self.table_name == "streams":
+                    if any(r.get("video_id") == new_row.get("video_id") for r in table_rows):
+                        raise ValueError("duplicate video_id")
+                    new_row.setdefault("summary_review_version", 0)
+                    new_row.setdefault("is_reviewed", False)
                 new_row.setdefault("id", self.client.next_id(self.table_name))
                 table_rows.append(new_row)
                 inserted.append(dict(new_row))
-            self.client.insert_calls.append({"table": self.table_name, "rows": inserted})
+            self.client.insert_calls.append({"table": self.table_name, "rows": inserted, "payload": self._payload})
             return _Response(inserted)
 
         if self.mode == "upsert":
@@ -203,11 +210,16 @@ class FakeQuery:
             payload = self._payload
             existing_row = next((r for r in table_rows if r.get(key) == payload.get(key)), None)
             if existing_row is not None:
+                if self.table_name == "streams" and "transcript" in payload and existing_row.get("transcript") != payload["transcript"]:
+                    existing_row["summary_review_version"] += 1
                 existing_row.update(payload)
                 result_row = dict(existing_row)
             else:
                 result_row = dict(payload)
                 result_row.setdefault("id", self.client.next_id(self.table_name))
+                if self.table_name == "streams":
+                    result_row.setdefault("summary_review_version", 0)
+                    result_row.setdefault("is_reviewed", False)
                 table_rows.append(result_row)
             self.client.upsert_calls.append({"table": self.table_name, "payload": dict(payload)})
             return _Response([dict(result_row)])
@@ -238,8 +250,19 @@ class FakeSupabaseClient:
         self.insert_calls: list[dict] = []
         self.upsert_calls: list[dict] = []
         self.rpc_calls: list[dict] = []
-        self.rpc_handlers: dict = {}
+        self.rpc_handlers: dict = {"save_generated_summary": self._save_generated_summary}
         self._id_counters: dict[str, int] = {}
+
+    def _save_generated_summary(self, params):
+        row = next(r for r in self.db["streams"] if r["id"] == params["p_stream_id"])
+        if not row.get("is_reviewed"):
+            if row["summary_review_version"] != params["p_expected_version"]:
+                raise ValueError("version conflict")
+            row["summary"] = params["p_summary_text"]
+            row["summary_review_version"] += 1
+        return {"stream_id": row["id"], "is_review_locked": row.get("is_reviewed", False),
+                "version": row["summary_review_version"], "review_run_id": None,
+                "was_first_summary_success": False}
 
     def table(self, name):
         return FakeQuery(self, name)
@@ -265,6 +288,7 @@ def make_stream_row(**overrides):
         "video_id": "vid-1",
         "transcript": "既存のtranscriptテキスト",
         "is_reviewed": False,
+        "summary_review_version": 0,
         "status": "public",
         "stream_date": "2026-07-01",
         "ai_prompt_ver": None,

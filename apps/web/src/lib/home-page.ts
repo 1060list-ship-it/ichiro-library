@@ -23,6 +23,7 @@ type HomeStreamBase = Pick<
   | 'view_count'
   | 'comment_count'
   | 'summary'
+  | 'summary_review_status'
   | 'tags'
   | 'corner_names'
   | 'thumbnail_url'
@@ -291,7 +292,7 @@ export async function fetchHomePageStreams(
         for (const row of ((res.data ?? []) as HomeStreamBase[])) {
           if (!seenRpcIds.has(row.id)) {
             seenRpcIds.add(row.id)
-            rpcResults.push(row)
+            rpcResults.push({ id: row.id, video_id: row.video_id, title: row.title, stream_date: row.stream_date, duration_min: row.duration_min, view_count: row.view_count, comment_count: row.comment_count, summary: row.summary, tags: row.tags, corner_names: row.corner_names, thumbnail_url: row.thumbnail_url, summary_review_status: null })
           }
         }
       }
@@ -313,6 +314,11 @@ export async function fetchHomePageStreams(
 
       resultCount = filtered.length
       streams = filtered.slice(0, 50)
+      if (streams.length) {
+        const statusResult = await client.from('streams').select('id,summary_review_status').in('id', streams.map((stream) => stream.id))
+        const statuses = new Map<string, Stream['summary_review_status']>((statusResult.data ?? []).map((row: Pick<Stream, 'id' | 'summary_review_status'>) => [row.id, row.summary_review_status]))
+        streams = streams.map((stream) => ({ ...stream, summary_review_status: statuses.get(stream.id) ?? null }))
+      }
     } else {
       let textStreams: HomeStreamBase[] = []
 

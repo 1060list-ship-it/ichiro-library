@@ -197,7 +197,7 @@ def test_new_stream_create_uses_common_tag_normalizer(fake_supabase, monkeypatch
 
     store.upsert_stream(fake_supabase, video_meta, "transcript", "youtube", ai_result)
 
-    assert fake_supabase.upsert_calls[0]["payload"]["tags"] == ["music_production", "guest"]
+    assert fake_supabase.insert_calls[0]["payload"]["tags"] == ["music_production", "guest"]
 
 
 def test_normalize_tags_uses_cached_vocabulary_within_process(fake_supabase):

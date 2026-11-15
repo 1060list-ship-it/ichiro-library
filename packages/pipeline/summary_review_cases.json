@@ -1,0 +1,20 @@
+[
+  {
+    "id": "ann-20261020-aiko",
+    "version": 2,
+    "program": "サカナクション山口一郎のオールナイトニッポン",
+    "program_aliases": [
+      "オールナイトニッポン",
+      "オールナイト日本"
+    ],
+    "broadcast_date": "2026-10-20",
+    "broadcast_time": "25:00",
+    "calendar_time": "2026-10-21T01:00:00+09:00",
+    "guest": "aiko",
+    "summary_alias": "あい子",
+    "subtitle_alias": "あ子",
+    "url": "https://news.ponycanyon.co.jp/2026/10/126960",
+    "official_quote": "10月20日25時より放送のニッポン放送『サカナクション山口一郎のオールナイトニッポン』にaikoがゲスト生出演する。",
+    "role_pattern_source": "確認済み原本の番組・当日ゲスト告知（summary / snippet 78）"
+  }
+]

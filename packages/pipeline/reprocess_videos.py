@@ -41,6 +41,10 @@ from summarize import (
 from store import (
     _REVIEW_LOCKED_FIELDS,
     get_supabase_client,
+    get_existing_stream,
+    generation_version,
+    save_generated_summary,
+    valid_generated_summary,
     insert_chapters,
     normalize_tags,
     save_transcript_snapshot,
@@ -432,6 +436,12 @@ def reprocess_one(
         )
         return True
 
+    before_generation = get_existing_stream(supabase, video_id)
+    if not before_generation or before_generation.get("id") != stream_id:
+        raise ValueError("stream missing before generation")
+    if before_generation.get("is_reviewed") and not force:
+        return False
+
     ai_result = summarize(
         summary_input or "",
         model=gemini,
@@ -439,7 +449,7 @@ def reprocess_one(
         reraise_resource_exhausted=True,
     )
 
-    if not ai_result:
+    if not valid_generated_summary(ai_result):
         logger.warning(f"[{video_id}] AI再処理失敗")
         _mark_stream_status(supabase, video_id, "summary_failed")
         return False
@@ -458,6 +468,10 @@ def reprocess_one(
             logger.warning(f"[{video_id}] snapshot 保存失敗: {e}")
             snapshot_id = None
 
+    current = get_existing_stream(supabase, video_id)
+    if not current:
+        raise ValueError("stream missing after generation")
+    version = generation_version(before_generation, current)
     chapters = ai_result.get("chapters") or []
     inserted_chapters = 0
     if chapters:
@@ -466,8 +480,10 @@ def reprocess_one(
             logger.warning(f"[{video_id}] chapters 挿入0件のため刻印せずスキップ")
             return False
 
+    saved = save_generated_summary(supabase, stream_id, version, ai_result)
+    review_locked = saved["is_review_locked"]
+
     stream_update = {
-        "summary":        ai_result.get("summary"),
         "tags":           normalize_tags(supabase, ai_result.get("tags", [])),
         "corner_names":   ai_result.get("corner_names", []),
         "guests":         ai_result.get("guests", []),
@@ -480,12 +496,15 @@ def reprocess_one(
     if row.get("status") in PERMANENT_FAILURE_STATUSES:
         stream_update["status"] = "public"
 
-    if force and row.get("is_reviewed"):
+    if review_locked:
         for field in _REVIEW_LOCKED_FIELDS:
             stream_update.pop(field, None)
         logger.info(f"[{video_id}] レビュー済みのため手動編集フィールドを保持")
 
     supabase.table("streams").update(stream_update).eq("video_id", video_id).execute()
+
+    from summary_review import consume_first_saved
+    consume_first_saved(supabase, saved, model=gemini, snapshot_id=snapshot_id)
 
     logger.info(f"[{video_id}] 更新完了: chapters={inserted_chapters} prompt={TARGET_PROMPT_VER}")
     return True

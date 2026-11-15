@@ -30,6 +30,8 @@ from get_transcript import get_transcript, build_timestamped_text
 from summarize import get_gemini_client, summarize
 from store import (
     get_supabase_client,
+    get_existing_stream,
+    valid_generated_summary,
     get_existing_video_ids,
     upsert_stream,
     insert_chapters,
@@ -55,6 +57,7 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
     video_id = video_meta["video_id"]
     logger.info(f"=== 処理開始: {video_id} / {video_meta.get('title', '')[:50]} ===")
 
+    before_generation = None if dry_run else get_existing_stream(supabase_client, video_id)
     transcript_result = get_transcript(video_id)
     timestamped_text = build_timestamped_text(transcript_result.snippets)
     ai_result = None
@@ -67,16 +70,20 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
     if dry_run:
         logger.info(f"[DRY RUN] {video_id} の書き込みをスキップ")
         logger.info(f"  transcript_source: {transcript_result.source}")
-        logger.info(f"  ai_result keys: {list(ai_result.keys()) if ai_result else None}")
+        logger.info(f"  ai_result keys: {list(ai_result.keys()) if isinstance(ai_result, dict) else None}")
         return transcript_result.source != "failed"
 
-    stream_id, is_review_locked = upsert_stream(
+    saved = upsert_stream(
         client=supabase_client,
         video_meta=video_meta,
         transcript_text=transcript_result.text,
         transcript_source=transcript_result.source,
         ai_result=ai_result,
+        before_generation=before_generation,
     )
+    stream_id, is_review_locked = saved["stream_id"], saved["is_review_locked"]
+    if not valid_generated_summary(ai_result):
+        ai_result = None
 
     snapshot_id = None
     if transcript_result.source != "failed" and transcript_result.snippets:
@@ -94,6 +101,9 @@ def process_video(video_meta: dict, gemini_model, supabase_client, dry_run: bool
         logger.info(f"[{video_id}] レビュー済みのためチャプター更新をスキップ")
     elif ai_result and ai_result.get("chapters"):
         insert_chapters(supabase_client, stream_id, ai_result["chapters"], snapshot_id=snapshot_id)
+
+    from summary_review import consume_first_saved
+    consume_first_saved(supabase_client, saved, model=gemini_model, snapshot_id=snapshot_id)
 
     logger.info(f"=== 処理完了: {video_id} ===")
 

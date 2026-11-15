@@ -1,3 +1,5 @@
+export type SummaryReviewStatus = 'legacy_unreviewed' | 'pending' | 'reviewed_no_change' | 'auto_fixed' | 'needs_review' | 'review_failed' | 'confirmed'
+
 export type Stream = {
   id: string
   video_id: string
@@ -9,6 +11,7 @@ export type Stream = {
   view_count_7d: number | null
   comment_count: number | null
   summary: string | null
+  summary_review_status: SummaryReviewStatus | null
   tags: string[] | null
   corner_names: string[] | null
   guests: string[] | null
@@ -258,7 +261,7 @@ export type Database = {
       }
       search_streams: {
         Args: SearchStreamsArgs
-        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'talk_topics' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'created_at' | 'updated_at'> & { total_count: number })[]
+        Returns: (Omit<Stream, 'like_count' | 'songs' | 'has_live_singing' | 'talk_topics' | 'status' | 'ai_model' | 'ai_prompt_ver' | 'is_reviewed' | 'summary_review_status' | 'created_at' | 'updated_at'> & { total_count: number })[]
       }
       create_song_entity: {
         Args: CreateSongEntityArgs

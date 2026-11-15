@@ -119,7 +119,9 @@ def test_reprocess_one_empty_chapters_from_ai_still_updates_stream_without_calli
     stream_updates = [c for c in fake_supabase.update_calls if c["table"] == "streams"]
     assert len(stream_updates) == 1
     payload = stream_updates[0]["payload"]
-    assert payload["summary"] == "要約テキスト"
+    assert "summary" not in payload
+    assert fake_supabase.db["streams"][0]["summary"] == "要約テキスト"
+    assert fake_supabase.rpc_calls[-1]["fn"] == "save_generated_summary"
     assert payload["tags"] == []
     assert payload["ai_model"] == reprocess_videos.MODEL_NAME
     assert payload["ai_prompt_ver"] == reprocess_videos.TARGET_PROMPT_VER

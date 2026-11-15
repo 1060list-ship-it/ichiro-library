@@ -24,7 +24,7 @@ export type AdminDashboardData = {
   failedStreams: AdminListStream[]
 }
 
-export type AdminListStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'status' | 'thumbnail_url' | 'is_reviewed'> & {
+export type AdminListStream = Pick<Stream, 'id' | 'video_id' | 'title' | 'stream_date' | 'status' | 'thumbnail_url' | 'is_reviewed' | 'summary_review_status'> & {
   needs_manual_review: boolean | null
 }
 
@@ -38,6 +38,7 @@ export type AdminEditableStream = Pick<
   | 'thumbnail_url'
   | 'youtube_url'
   | 'is_reviewed'
+  | 'summary_review_status'
   | 'summary'
   | 'tags'
   | 'corner_names'
@@ -137,6 +138,7 @@ const ADMIN_STREAM_SELECT_BASE = `
   thumbnail_url,
   youtube_url,
   is_reviewed,
+  summary_review_status,
   summary,
   tags,
   corner_names,
@@ -228,12 +230,12 @@ export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
     supabaseAdmin.from('streams').select('id', { count: 'exact', head: true }).eq('status', 'transcript_failed'),
     supabaseAdmin
       .from('streams')
-      .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review')
+      .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review, summary_review_status')
       .eq('is_reviewed', false)
       .order('stream_date', { ascending: false }),
     supabaseAdmin
       .from('streams')
-      .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review')
+      .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review, summary_review_status')
       .eq('status', 'transcript_failed')
       .order('stream_date', { ascending: false }),
   ])
@@ -342,7 +344,7 @@ export async function searchAdminStreams(input: AdminStreamSearchInput): Promise
 
   let query = supabaseAdmin
     .from('streams')
-    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review')
+    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review, summary_review_status')
     .order('stream_date', { ascending: false })
     .limit(limit)
 
@@ -370,7 +372,7 @@ export async function fetchAdminStreamsPage(offset = 0, limit = 20): Promise<Adm
 
   const { data, error } = await supabaseAdmin
     .from('streams')
-    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review')
+    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review, summary_review_status')
     .eq('is_reviewed', true)
     .order('stream_date', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -504,7 +506,7 @@ export async function setAdminStreamReviewed(videoId: string, isReviewed: boolea
     .from('streams')
     .update({ is_reviewed: isReviewed } as never)
     .eq('video_id', videoId)
-    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review')
+    .select('id, video_id, title, stream_date, status, thumbnail_url, is_reviewed, needs_manual_review, summary_review_status')
     .single()
 
   if (error) {
