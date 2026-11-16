@@ -22,7 +22,8 @@ WITH seed_streams (
   summary, tags, corner_names, guests,
   transcript,
   youtube_url, thumbnail_url,
-  status, ai_model, ai_prompt_ver, is_reviewed
+  status, ai_model, ai_prompt_ver, is_reviewed,
+  summary_review_status, summary_review_base_status, summary_success_seen
 ) AS (
 VALUES
 (
@@ -42,7 +43,7 @@ VALUES
   'public',
   'gemini-1.5-flash',
   'v1',
-  true
+  true, 'confirmed', 'legacy_unreviewed', true
 ),
 (
   'test_stream_002',
@@ -61,7 +62,7 @@ VALUES
   'public',
   'gemini-1.5-flash',
   'v1',
-  true
+  true, 'confirmed', 'legacy_unreviewed', true
 ),
 (
   'test_stream_003',
@@ -80,7 +81,7 @@ VALUES
   'public',
   'gemini-1.5-flash',
   'v1',
-  false
+  false, 'legacy_unreviewed', 'legacy_unreviewed', true
 )
 ),
 invalid_tags AS (
@@ -105,7 +106,8 @@ INSERT INTO streams (
   summary, tags, corner_names, guests,
   transcript,
   youtube_url, thumbnail_url,
-  status, ai_model, ai_prompt_ver, is_reviewed
+  status, ai_model, ai_prompt_ver, is_reviewed,
+  summary_review_status, summary_review_base_status, summary_success_seen
 )
 SELECT
   video_id, title, stream_date, duration_min,
@@ -113,7 +115,8 @@ SELECT
   summary, tags, corner_names, guests,
   transcript,
   youtube_url, thumbnail_url,
-  status, ai_model, ai_prompt_ver, is_reviewed
+  status, ai_model, ai_prompt_ver, is_reviewed,
+  summary_review_status, summary_review_base_status, summary_success_seen
 FROM seed_streams
 CROSS JOIN tag_validation
 WHERE tag_validation.valid = 1;
