@@ -5,9 +5,11 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 const REPORT_THRESHOLD = 5
 
 // 未認証で呼べるエンドポイントのため、同一動画への報告を時間窓で上限制限する。
-// 上限は閾値判定（6件）より広く取り、正常な報告フローを壊さない範囲でスパムを抑える。
+// 上限12件は「閾値6件×2ラウンド（自動再処理→手動レビュー）」が同一時間窓で成立する
+// 理論上の正規フロー上限。それ以上の報告は情報目的のみのため破棄し、
+// スパムを1時間あたり12行・状態遷移2回までに限定する。
 const REPORT_WINDOW_HOURS = 1
-const REPORT_MAX_PER_WINDOW = 10
+const REPORT_MAX_PER_WINDOW = 12
 const VIDEO_ID_MAX_LENGTH = 64
 const USER_AGENT_MAX_LENGTH = 300
 
@@ -78,7 +80,7 @@ export async function reportStreamSummary(
     // 初回閾値超え → 自動再処理をキューに積む
     await db
       .from('pipeline_jobs')
-      .insert({ kind: 'reprocess_single', video_id: videoId, payload: null })
+      .insert({ kind: 'reprocess_single', video_id: normalizedVideoId, payload: null })
 
     await db
       .from('streams')
