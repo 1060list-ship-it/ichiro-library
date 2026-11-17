@@ -208,16 +208,19 @@ export default function PrivacyPage() {
             </p>
           </section>
 
+          {/* 【一時非表示】6. ユーザーの権利
+              復元時は後続の「6. 本ポリシーの変更」を「7.」に戻すこと。
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">6. ユーザーの権利</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               メンバー登録ユーザーは、登録メールアドレスの確認・削除を下記連絡先にリクエストできます。リクエスト受領から30日以内に対応します。
             </p>
           </section>
+          */}
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              7. 本ポリシーの変更
+              6. 本ポリシーの変更
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               法令改正やサービス変更に伴い、予告なくポリシーを更新することがあります。重要な変更は当サービス上でお知らせします。
