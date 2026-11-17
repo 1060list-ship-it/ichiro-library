@@ -224,6 +224,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
+          {/* 【一時非表示】8. お問い合わせ（最終節のため復元時の番号変更は不要）
           <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
             <h2 className="text-xl font-semibold text-white">8. お問い合わせ</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
@@ -239,6 +240,7 @@ export default function PrivacyPage() {
               </a>
             </p>
           </section>
+          */}
         </article>
       </div>
     </main>
