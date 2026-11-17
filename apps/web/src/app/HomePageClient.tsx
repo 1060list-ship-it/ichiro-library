@@ -460,7 +460,7 @@ export default function HomePageClient({
       </div>
 
       <footer className="footer-glow mt-12 px-4 py-6 text-center text-xs text-[var(--muted)]">
-        <p>管理者: <a href="https://x.com/ikki_i" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--ink)]">ikki</a></p>
+        <p>管理者: ほたて</p>
         <p className="mt-1">非公式ファンサイト。サカナクション・山口一郎とは無関係です。</p>
         <p className="mt-2 flex justify-center gap-4">
           <Link href="/about" className="underline hover:text-[var(--ink)]">このサービスについて</Link>

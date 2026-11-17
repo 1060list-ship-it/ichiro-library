@@ -102,6 +102,8 @@ export default function PrivacyPage() {
             </ul>
           </section>
 
+          {/* 【一時非表示】4. YouTube サービスの利用について・5. 第三者サービスとの情報共有
+              復元時は下記コメントを外し、後続セクションの番号（4〜8）を6〜10に戻すこと。
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
               4. YouTube サービスの利用について
@@ -186,10 +188,11 @@ export default function PrivacyPage() {
               個人情報を広告目的で第三者に販売・提供することはありません。
             </p>
           </section>
+          */}
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              6. Cookie・アクセスログ
+              4. Cookie・アクセスログ
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               当サービスは基本機能の動作のために最小限の Cookie（セッション管理）を使用します。広告 Cookie・トラッキング Cookie は使用しません。Vercel のホスティング基盤によりアクセスログ（IPアドレス・User-Agent）が自動収集されますが、当サービス側での個別管理は行いません。
@@ -198,7 +201,7 @@ export default function PrivacyPage() {
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              7. 情報の保管・セキュリティ
+              5. 情報の保管・セキュリティ
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               収集した情報は Supabase（データセンター: 東京リージョン）に保存します。通信は HTTPS で暗号化されます。ただし、インターネット上での完全なセキュリティを保証するものではありません。
@@ -206,7 +209,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-xl font-semibold text-white">8. ユーザーの権利</h2>
+            <h2 className="text-xl font-semibold text-white">6. ユーザーの権利</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               メンバー登録ユーザーは、登録メールアドレスの確認・削除を下記連絡先にリクエストできます。リクエスト受領から30日以内に対応します。
             </p>
@@ -214,7 +217,7 @@ export default function PrivacyPage() {
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              9. 本ポリシーの変更
+              7. 本ポリシーの変更
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               法令改正やサービス変更に伴い、予告なくポリシーを更新することがあります。重要な変更は当サービス上でお知らせします。
@@ -222,7 +225,7 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-xl font-semibold text-white">10. お問い合わせ</h2>
+            <h2 className="text-xl font-semibold text-white">8. お問い合わせ</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               プライバシーに関するお問い合わせは下記までご連絡ください。
             </p>
