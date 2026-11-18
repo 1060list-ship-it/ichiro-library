@@ -6,12 +6,16 @@
 -- パイプライン書き込み・検証用途を維持する。
 
 DROP POLICY IF EXISTS "superchats_public_read" ON public.superchats;
-CREATE POLICY "superchats_admin_read" ON public.superchats
-  FOR SELECT TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+  CREATE POLICY "superchats_admin_read" ON public.superchats
+    FOR SELECT TO authenticated
+    USING (EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role = 'admin'
+    ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 REVOKE EXECUTE ON FUNCTION public.superchat_ranking_all(TEXT, INTEGER) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.superchat_ranking_by_video(TEXT, TEXT, INTEGER) FROM PUBLIC, anon;
