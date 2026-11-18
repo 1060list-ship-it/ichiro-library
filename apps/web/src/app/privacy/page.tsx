@@ -43,7 +43,7 @@ export default function PrivacyPage() {
               <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 ichiro library プライバシーポリシー
               </h1>
-              <p className="text-sm text-gray-400">最終更新日：2026年6月22日</p>
+              <p className="text-sm text-gray-400">最終更新日：2026年11月18日</p>
             </div>
           </header>
 
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
 
             <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <h3 className="text-base font-semibold text-white">
-                メンバー登録ユーザー（招待制ベータ）
+                メンバー登録ユーザー
               </h3>
               <p className="text-sm leading-7 text-gray-300 sm:text-base">
                 メンバー登録時にメールアドレスのみを収集します。氏名・電話番号・決済情報は一切収集しません。
@@ -82,7 +82,7 @@ export default function PrivacyPage() {
                 YouTubeコンテンツデータ
               </h3>
               <p className="text-sm leading-7 text-gray-300 sm:text-base">
-                YouTube Data API v3 を通じて、動画のタイトル・配信日時・視聴数・字幕データを取得します。これらは当サービスのデータベースに保存され、検索・要約機能に利用します。個人を特定する情報は含まれません。
+                YouTube から動画のタイトル・配信日時・視聴数等のメタデータと字幕データを取得し、当サービスのデータベースに保存します。検索・要約機能に利用し、字幕データの全文は会員登録ユーザーにのみ表示します。個人を特定する情報は含まれません。
               </p>
             </div>
           </section>
@@ -102,14 +102,12 @@ export default function PrivacyPage() {
             </ul>
           </section>
 
-          {/* 【一時非表示】4. YouTube サービスの利用について・5. 第三者サービスとの情報共有
-              復元時は下記コメントを外し、後続セクションの番号（4〜8）を6〜10に戻すこと。
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
               4. YouTube サービスの利用について
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
-              当サービスは YouTube Data API Services を利用しています。YouTube のデータを利用するにあたり、以下のポリシーに準拠しています。
+              当サービスは YouTube Data API Services を利用し、動画のタイトル・配信日時・統計情報および字幕データを取得・保存しています。これらのコンテンツの権利は YouTube および各権利者に帰属します。字幕データの全文は、会員登録ユーザーにのみ表示します。
             </p>
             <ul className="space-y-2 pl-5 text-sm leading-7 text-gray-300 marker:text-gray-500 sm:text-base">
               <li>
@@ -188,11 +186,10 @@ export default function PrivacyPage() {
               個人情報を広告目的で第三者に販売・提供することはありません。
             </p>
           </section>
-          */}
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              4. Cookie・アクセスログ
+              6. Cookie・アクセスログ
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               当サービスは基本機能の動作のために最小限の Cookie（セッション管理）を使用します。広告 Cookie・トラッキング Cookie は使用しません。Vercel のホスティング基盤によりアクセスログ（IPアドレス・User-Agent）が自動収集されますが、当サービス側での個別管理は行いません。
@@ -201,15 +198,15 @@ export default function PrivacyPage() {
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              5. 情報の保管・セキュリティ
+              7. 情報の保管・セキュリティ
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               収集した情報は Supabase（データセンター: 東京リージョン）に保存します。通信は HTTPS で暗号化されます。ただし、インターネット上での完全なセキュリティを保証するものではありません。
             </p>
           </section>
 
-          {/* 【一時非表示】6. ユーザーの権利
-              復元時は後続の「6. 本ポリシーの変更」を「7.」に戻すこと。
+          {/* 【一時非表示】ユーザーの権利
+              復元時は後続の「8. 本ポリシーの変更」を「9.」に戻すこと。
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">6. ユーザーの権利</h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
@@ -220,7 +217,7 @@ export default function PrivacyPage() {
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold text-white">
-              6. 本ポリシーの変更
+              8. 本ポリシーの変更
             </h2>
             <p className="text-sm leading-7 text-gray-300 sm:text-base">
               法令改正やサービス変更に伴い、予告なくポリシーを更新することがあります。重要な変更は当サービス上でお知らせします。

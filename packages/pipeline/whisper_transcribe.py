@@ -1,6 +1,11 @@
 """
 Whisper 文字起こしモジュール — transcript_failed の最終フォールバック
 
+【2026-11-18 一般公開対応で既定無効化】
+yt-dlp による音声ダウンロードは YouTube 利用規約のダウンロード禁止条項に抵触するため、
+環境変数 ENABLE_AUDIO_DOWNLOAD=1 を明示設定しない限り実行不可とした。
+（個人利用で意図的に使う場合のみ有効化）
+
 フロー:
   1. yt-dlp で YouTube から音声をダウンロード（m4a/mp3）
   2. OpenAI Whisper API または mlx_whisper で文字起こし（ja）
@@ -169,6 +174,12 @@ def transcribe_and_store(
     worker.py の whisper_transcribe ジョブから呼び出される。
     """
     mode = "local" if local else "api"
+    if (os.getenv("ENABLE_AUDIO_DOWNLOAD") or "").strip() != "1":
+        raise RuntimeError(
+            "yt-dlp による音声ダウンロードは一般公開版で無効化されています"
+            "（YouTube 利用規約のダウンロード禁止条項への対応）。",
+            "意図的に有効化する場合は環境変数 ENABLE_AUDIO_DOWNLOAD=1 を設定してください。",
+        )
     if dry_run:
         logger.info(
             "[DRY RUN] %s whisper_transcribe をスキップ: mode=%s no_summarize=%s",

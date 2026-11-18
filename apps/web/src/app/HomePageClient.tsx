@@ -464,6 +464,7 @@ export default function HomePageClient({
         <p className="mt-1">非公式ファンサイト。サカナクション・山口一郎とは無関係です。</p>
         <p className="mt-2 flex justify-center gap-4">
           <Link href="/about" className="underline hover:text-[var(--ink)]">このサービスについて</Link>
+          <Link href="/terms" className="underline hover:text-[var(--ink)]">利用規約</Link>
           <Link href="/privacy" className="underline hover:text-[var(--ink)]">プライバシーポリシー</Link>
         </p>
       </footer>
