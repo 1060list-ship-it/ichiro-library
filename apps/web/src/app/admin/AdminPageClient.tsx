@@ -570,6 +570,12 @@ export default function AdminPageClient({
             >
               プレイリスト管理
             </Link>
+            <Link
+              href="/superchat"
+              className="text-sm text-gray-500 transition hover:text-gray-300"
+            >
+              スパチャランキング
+            </Link>
             <form action={logoutAction}>
               <button
                 type="submit"

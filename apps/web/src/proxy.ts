@@ -64,8 +64,10 @@ export default async function proxy(request: NextRequest) {
   const isMagazinePath =
     request.nextUrl.pathname === '/magazine' || request.nextUrl.pathname.startsWith('/magazine/')
   const isMagazineCover = request.nextUrl.pathname.startsWith('/magazine-covers/')
+  const isSuperchatPath =
+    request.nextUrl.pathname === '/superchat' || request.nextUrl.pathname.startsWith('/superchat/')
 
-  if (isMagazinePath || isMagazineCover) {
+  if (isMagazinePath || isMagazineCover || isSuperchatPath) {
     // Unlike the existing optimistic cookie check, this boundary requires a
     // verified user and an administrator role, including for static covers.
     if (!data.user) {
@@ -113,5 +115,5 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/member/:path*', '/admin/:path*', '/login', '/magazine/:path*', '/magazine-covers/:path*'],
+  matcher: ['/member/:path*', '/admin/:path*', '/login', '/magazine/:path*', '/magazine-covers/:path*', '/superchat/:path*'],
 }
